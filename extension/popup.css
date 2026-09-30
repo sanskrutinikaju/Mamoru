@@ -1,0 +1,89 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 260px;
+  background: #07080c;
+  color: #d7e4ee;
+  font-family: "Segoe UI", "Yu Gothic", sans-serif;
+}
+
+.panel {
+  padding: 20px 18px 16px;
+  border: 1px solid #1f3a44;
+  background:
+    linear-gradient(180deg, rgba(0, 255, 209, 0.06), transparent 40%),
+    #0b0e14;
+}
+
+.kana {
+  margin: 0;
+  color: #7fffd4;
+  letter-spacing: 0.35em;
+  font-size: 11px;
+}
+
+h1 {
+  margin: 6px 0 12px;
+  font-size: 22px;
+  letter-spacing: 0.18em;
+}
+
+.status {
+  margin: 0 0 8px;
+  color: #7a8894;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+
+.status.active {
+  color: #7fffd4;
+}
+
+.phrase {
+  min-height: 1.4em;
+  margin: 0 0 8px;
+  color: #e8fff8;
+  font-size: 16px;
+}
+
+.message {
+  min-height: 2.4em;
+  margin: 0 0 16px;
+  color: #a8b8c4;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.message.error {
+  color: #ffb4a8;
+}
+
+button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #7fffd4;
+  background: transparent;
+  color: #7fffd4;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: rgba(127, 255, 212, 0.12);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.hint {
+  margin: 12px 0 0;
+  color: #6c7a85;
+  font-size: 11px;
+  line-height: 1.4;
+}

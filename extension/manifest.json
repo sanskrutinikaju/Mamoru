@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Mamoru",
+  "version": "0.1.0",
+  "description": "A privacy-first, user-initiated browser safety assistant. Mamoru stays inactive until you click PROTECT ME.",
+  "action": {
+    "default_title": "Mamoru",
+    "default_popup": "popup.html"
+  },
+  "host_permissions": [
+    "http://127.0.0.1:8000/*"
+  ]
+}
