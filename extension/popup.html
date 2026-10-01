@@ -12,8 +12,50 @@
       <p id="status" class="status">INACTIVE</p>
       <p id="phrase" class="phrase"></p>
       <p id="message" class="message"></p>
+
+      <!-- Extraction Summary Panel -->
+      <div id="extraction-summary" class="extraction-panel" style="display: none">
+        <div class="summary-section">
+          <p class="summary-label">Page URL:</p>
+          <p id="summary-url" class="summary-value"></p>
+
+          <p class="summary-label">Title:</p>
+          <p id="summary-title" class="summary-value"></p>
+
+          <p class="summary-label">Language:</p>
+          <p id="summary-language" class="summary-value"></p>
+
+          <p class="summary-label">Word Count:</p>
+          <p id="summary-word-count" class="summary-value"></p>
+
+          <p class="summary-label">Preview:</p>
+          <p id="summary-preview" class="summary-value summary-preview"></p>
+        </div>
+      </div>
+
+      <!-- Extraction Confirmation Panel -->
+      <div id="extraction-confirm" class="extraction-panel" style="display: none">
+        <div class="confirm-section">
+          <p class="confirm-label">
+            I understand that Mamoru will analyze this page content for safety
+            information.
+          </p>
+          <div class="button-group">
+            <button id="confirm-button" type="button" class="confirm-btn">
+              Proceed
+            </button>
+            <button id="cancel-button" type="button" class="cancel-btn">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+
       <button id="protect-me" type="button">PROTECT ME</button>
-      <p class="hint">Mamoru does not scan pages. This click only checks the local safety service.</p>
+      <p class="hint">
+        Mamoru extracts this page's content only after you click PROTECT ME and
+        confirm. Content is not stored.
+      </p>
     </main>
     <script src="popup.js"></script>
   </body>

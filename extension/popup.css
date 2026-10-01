@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  min-width: 260px;
+  min-width: 280px;
   background: #07080c;
   color: #d7e4ee;
   font-family: "Segoe UI", "Yu Gothic", sans-serif;
@@ -86,4 +86,77 @@ button:disabled {
   color: #6c7a85;
   font-size: 11px;
   line-height: 1.4;
+}
+
+/* Extraction Summary Panel */
+.extraction-panel {
+  margin: 12px 0 16px;
+  padding: 12px;
+  border: 1px solid #1f5a66;
+  background: rgba(0, 255, 209, 0.03);
+  border-radius: 4px;
+}
+
+.summary-section {
+  font-size: 11px;
+}
+
+.summary-label {
+  margin: 0 0 4px;
+  color: #7fffd4;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.summary-value {
+  margin: 0 0 12px;
+  padding: 0 0 0 8px;
+  color: #a8b8c4;
+  font-size: 11px;
+  border-left: 2px solid #7fffd4;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.summary-preview {
+  max-height: 80px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: "Courier New", monospace;
+  font-size: 10px;
+}
+
+/* Confirmation Section */
+.confirm-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirm-label {
+  margin: 0;
+  color: #a8b8c4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
+}
+
+.confirm-btn,
+.cancel-btn {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.cancel-btn {
+  border-color: #8b7d7d;
+  color: #8b7d7d;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background: rgba(139, 125, 125, 0.12);
 }

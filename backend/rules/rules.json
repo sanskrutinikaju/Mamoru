@@ -1,0 +1,297 @@
+{
+  "version": "1.0",
+  "description": "Responsible AI signal detection rules for Mamoru",
+  "rules": [
+    {
+      "ruleId": "AI_DISCLOSURE_001",
+      "category": "AI Use & Disclosure",
+      "enabled": true,
+      "description": "Detects explicit disclosure of AI use in content creation or systems",
+      "patterns": {
+        "keywords": [
+          "powered by ai",
+          "ai-generated",
+          "chatgpt",
+          "claude",
+          "gpt-",
+          "dall-e",
+          "machine learning",
+          "artificial intelligence",
+          "uses ai",
+          "ai assistant",
+          "ai helped",
+          "generated using ai",
+          "ai model",
+          "large language model",
+          "llm"
+        ],
+        "minMatches": 1
+      },
+      "confidenceRules": {
+        "HIGH": "Multiple clear AI disclosures or AI tool name prominently featured",
+        "MEDIUM": "Single clear disclosure or combination of weak signals",
+        "LOW": "Ambiguous mention of automation or algorithmic content"
+      },
+      "falsePositives": [
+        "Page discussing AI without being AI-generated",
+        "Use of 'intelligent' in product marketing",
+        "References to AI in historical or fictional context"
+      ]
+    },
+    {
+      "ruleId": "TRANSPARENCY_001",
+      "category": "Transparency",
+      "enabled": true,
+      "description": "Detects transparency about how AI systems work or make decisions",
+      "patterns": {
+        "keywords": [
+          "algorithm",
+          "how it works",
+          "recommendation",
+          "ranking factors",
+          "methodology",
+          "decision-making",
+          "model card",
+          "limitations",
+          "known biases",
+          "feature importance",
+          "transparent",
+          "explains why",
+          "why this appeared"
+        ],
+        "minMatches": 1
+      },
+      "confidenceRules": {
+        "HIGH": "Detailed explanation of AI decision-making with specific methodology or factors",
+        "MEDIUM": "General transparency statement with some specific details",
+        "LOW": "Vague mention of transparency or algorithm without concrete explanation"
+      },
+      "falsePositives": [
+        "Marketing copy claiming transparency without proof",
+        "Explanation of non-AI automation",
+        "Dense technical discussion without clarity"
+      ]
+    },
+    {
+      "ruleId": "PRIVACY_DATA_001",
+      "category": "Privacy & Data Use",
+      "enabled": true,
+      "description": "Detects disclosure of how personal data is collected and used by AI systems",
+      "patterns": {
+        "keywords": [
+          "privacy policy",
+          "data collection",
+          "personal data",
+          "browsing history",
+          "behavioral data",
+          "personalization",
+          "training data",
+          "data retention",
+          "data sharing",
+          "third-party",
+          "anonymized",
+          "federated learning",
+          "privacy-preserving",
+          "consent",
+          "opt-in",
+          "opt-out"
+        ],
+        "minMatches": 2
+      },
+      "confidenceRules": {
+        "HIGH": "Clear specific privacy disclosure tied to AI data practices",
+        "MEDIUM": "Privacy policy mentions data use but connection to AI is unclear or weak",
+        "LOW": "General privacy statement without specific AI context"
+      },
+      "falsePositives": [
+        "Generic privacy policy unrelated to AI",
+        "Mention of data without AI connection",
+        "Cookie disclosure unrelated to AI systems"
+      ]
+    },
+    {
+      "ruleId": "FAIRNESS_BIAS_001",
+      "category": "Fairness & Bias",
+      "enabled": true,
+      "description": "Detects acknowledgment of or testing for fairness and bias in AI systems",
+      "patterns": {
+        "keywords": [
+          "fairness",
+          "bias",
+          "discrimination",
+          "demographic",
+          "gender bias",
+          "racial bias",
+          "underperform",
+          "fairness testing",
+          "fairness report",
+          "debiasing",
+          "fairness audit",
+          "inclusive",
+          "equitable",
+          "disparate impact",
+          "mitigation"
+        ],
+        "minMatches": 1
+      },
+      "confidenceRules": {
+        "HIGH": "Detailed fairness analysis with specific metrics, testing data, or demographic breakdowns",
+        "MEDIUM": "Acknowledgment of fairness concerns with some documented mitigation efforts",
+        "LOW": "General fairness commitment without concrete evidence or testing"
+      },
+      "falsePositives": [
+        "Use of 'diversity' without fairness testing connection",
+        "Discussion of fairness in non-AI context",
+        "Marketing claim of fairness without evidence"
+      ]
+    },
+    {
+      "ruleId": "OVERSIGHT_ACCOUNTABILITY_001",
+      "category": "Human Oversight & Accountability",
+      "enabled": true,
+      "description": "Detects human oversight, accountability mechanisms, or appeal processes for AI decisions",
+      "patterns": {
+        "keywords": [
+          "human review",
+          "appeal",
+          "escalation",
+          "governance",
+          "ethics committee",
+          "oversight board",
+          "accountability",
+          "audit trail",
+          "challenge decision",
+          "contact us",
+          "human oversight",
+          "reviewed by humans",
+          "decision explanation",
+          "why was i",
+          "responsible",
+          "transparent decision"
+        ],
+        "minMatches": 1
+      },
+      "confidenceRules": {
+        "HIGH": "Clear human oversight with documented process and user-accessible appeals mechanism",
+        "MEDIUM": "Mentioned oversight but lacking specifics or easy user access to appeals",
+        "LOW": "General accountability statement without concrete oversight mechanisms"
+      },
+      "falsePositives": [
+        "General customer service mention unrelated to AI oversight",
+        "Mention of responsible AI without actual oversight mechanism",
+        "Human involvement in non-AI product areas"
+      ]
+    },
+    {
+      "ruleId": "MANIPULATION_001",
+      "category": "Manipulation & Deceptive Practices",
+      "enabled": true,
+      "description": "Detects signs of AI-driven manipulation or covert algorithmic practices without disclosure",
+      "patterns": {
+        "keywords": [
+          "personalized for you",
+          "behavioral targeting",
+          "dynamic pricing",
+          "recommendation",
+          "personalization",
+          "customized",
+          "tailored",
+          "for you",
+          "feed algorithm",
+          "invisible",
+          "microtargeting",
+          "persuasion",
+          "engagement optimization"
+        ],
+        "minMatches": 2
+      },
+      "confidenceRules": {
+        "HIGH": "Pattern of personalization/recommendation without explanation or user choice",
+        "MEDIUM": "Personalization present with some disclosure or user control available",
+        "LOW": "Personalization signals present but insufficient evidence of deception or manipulation"
+      },
+      "falsePositives": [
+        "Any personalization (which can be beneficial)",
+        "Mention of targeting in marketing context",
+        "General recommendation features that are transparent"
+      ]
+    },
+    {
+      "ruleId": "EVIDENCE_CLAIMS_001",
+      "category": "Evidence & Claims",
+      "enabled": true,
+      "description": "Detects AI-generated or AI-driven conclusions presented without supporting evidence or methodology",
+      "patterns": {
+        "keywords": [
+          "ai predicts",
+          "ai says",
+          "data shows",
+          "research shows",
+          "study found",
+          "according to",
+          "statistics",
+          "findings",
+          "evidence",
+          "methodology",
+          "citation",
+          "source",
+          "trained on",
+          "model accuracy",
+          "confidence"
+        ],
+        "minMatches": 2
+      },
+      "confidenceRules": {
+        "HIGH": "AI claim or statistic with no supporting evidence, methodology, or sources cited",
+        "MEDIUM": "Some evidence or methodology provided but incomplete or unclear",
+        "LOW": "Well-supported claim with clear methodology and evidence references"
+      },
+      "falsePositives": [
+        "Complex but actually well-supported claims",
+        "Legitimate research presented clearly but densely",
+        "Academic writing with assumed reader knowledge"
+      ]
+    },
+    {
+      "ruleId": "AI_GENERATED_CONTENT_001",
+      "category": "AI-Generated Content Signals",
+      "enabled": true,
+      "description": "Detects indicators that content may be AI-generated without disclosure",
+      "patterns": {
+        "keywords": [
+          "ai-generated",
+          "generated by ai",
+          "created with",
+          "written with",
+          "ai assistant",
+          "generated content",
+          "synthetic media",
+          "ai wrote",
+          "ai image",
+          "ai video",
+          "generated image",
+          "generated video",
+          "dall-e",
+          "midjourney",
+          "stable diffusion"
+        ],
+        "minMatches": 1,
+        "stylistic_indicators": [
+          "excessive_formality",
+          "unnatural_structure",
+          "repetitive_phrasing"
+        ]
+      },
+      "confidenceRules": {
+        "HIGH": "Clear disclosure of AI generation OR obvious generated content with no disclosure",
+        "MEDIUM": "Possible AI generation with weak signals or disclosure present but unclear",
+        "LOW": "Ambiguous indicators, could be human-written with certain style"
+      },
+      "falsePositives": [
+        "Well-written human content that appears AI-like",
+        "Discussion of AI without being AI-generated",
+        "Formal writing style confused with AI generation"
+      ]
+    }
+  ]
+}

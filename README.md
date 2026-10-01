@@ -10,14 +10,16 @@ Browser Extension → FastAPI → Rule Engine → LLM → Pydantic → Safety Re
 
 ## Current status
 
-**Milestone 4 — Extension connected to FastAPI** is in place:
+**Milestone 5 — Safe Webpage Content Extraction** is complete:
 
-- **PROTECT ME** calls `GET /health` on the local backend
-- The popup shows the backend reply, or a connection error
-- Webpage content is still not collected
-- No LLM yet
+- User clicks **PROTECT ME**
+- Extension extracts visible webpage text (user sees preview)
+- User confirms extraction before sending
+- Backend receives extracted content (NOT stored)
+- Backend returns acknowledgement
+- Content is ephemeral; never persisted
 
-Later milestones will add the rule engine, LLM analysis, and the Safety Report.
+**Upcoming:** M6 will add the rule engine for deterministic analysis.
 
 ## Setup
 
@@ -51,10 +53,35 @@ Chrome or Edge:
 
 Reload the unpacked extension after code changes.
 
-Start the backend first, then click the Mamoru icon and **PROTECT ME**. You should see **任せて。** and the health message, then **INACTIVE**. If the backend is stopped, you should see: `Mamoru could not connect to the local safety service.`
+Start the backend first, then click the Mamoru icon and **PROTECT ME**. 
 
-After changing `manifest.json`, click **Reload** on the extension card so the new local-host permission is applied.
+The extension will:
+1. Show **任せて。** (I'm on it)
+2. Extract the visible text from the current page
+3. Show a summary: URL, title, language, word count, text preview
+4. Ask for confirmation: "Proceed with analysis?"
+5. Send the extraction to the backend
+6. Show **終わった。** (Done) when complete
+
+If the backend is not running, you will see: `Mamoru could not connect to the local safety service.`
+
+After changing `manifest.json`, click **Reload** on the extension card so the new permissions are applied.
 
 ## Privacy
 
-Mamoru does not scan pages automatically. Analysis happens only after the user explicitly requests it. API keys stay on the backend and must never be placed in the browser extension.
+Mamoru does not scan pages automatically. Analysis happens only after the user explicitly clicks **PROTECT ME** and confirms the extraction summary.
+
+**Key privacy guarantees (M5):**
+- No automatic requests (only on user click)
+- No content storage (content processed in memory only)
+- No background monitoring (content script runs on demand)
+- No browsing history collection (only current page, then deleted)
+- No cookies or persistent tracking
+
+**Future milestones** (M6–M10) will add:
+- M6: Deterministic rule engine (explicit findings)
+- M7: LLM integration (for understanding, not judgment)
+- M8: Report generation (findings + reasoning)
+- M9: Uncertainty quantification (honest about limitations)
+- M10: Privacy controls (user-controlled logging, data export, auto-delete)
+
