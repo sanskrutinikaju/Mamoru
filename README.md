@@ -1,29 +1,23 @@
 # Mamoru（マモル）
 
-Mamoru is a privacy-first browser safety assistant. It stays inactive until the user clicks **PROTECT ME**, then analyzes the current webpage and returns a Safety Report.
+Mamoru is a consent-first browser threat analyzer. It stays inactive until you click **PROTECT ME**, preview the extracted text, and confirm. Then the extension sends that text to a **local** Python API on your computer.
 
-This repository is a college / portfolio project. The architecture is:
+This is an engineering portfolio project. It is not a finished security product.
 
-```text
-Browser Extension → FastAPI → Rule Engine → LLM → Pydantic → Safety Report
-```
+## Current status (honest)
 
-## Current status
+**Phase 1 — Hardening** is in place:
 
-**Milestone 5 — Safe Webpage Content Extraction** is complete:
+- User click → visible text preview → confirm → `POST /analyze`
+- Shared secret token + CORS limited to Chrome extension pages
+- Size limits and validation that do not echo page text
+- Tests and GitHub Actions CI
 
-- User clicks **PROTECT ME**
-- Extension extracts visible webpage text (user sees preview)
-- User confirms extraction before sending
-- Backend receives extracted content (NOT stored)
-- Backend returns acknowledgement
-- Content is ephemeral; never persisted
+**Not built yet:** rule engine, LLM, Safety Report, uncertainty handling.
 
-**Upcoming:** M6 will add the rule engine for deterministic analysis.
+`backend/rules/` still contains leftover keyword files from an older experiment. They are **not** used by the API. Phase 2 will replace that work.
 
 ## Setup
-
-From the project root:
 
 ```powershell
 python -m venv .venv
@@ -32,56 +26,47 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
+Put the **same** token in `.env` (`MAMORU_API_TOKEN`) and in `extension/config.js`. The example value `dev-only-change-me` is public; change it for any real demo.
+
 ## Run the backend
 
 ```powershell
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Then open [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health) in a browser.
+Health check (no token): [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
-You should see JSON confirming the backend is running.
-
-## Load the browser extension
-
-Chrome or Edge:
+## Load the extension
 
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Turn on **Developer mode**.
-3. Click **Load unpacked**.
-4. Select the `extension` folder inside this project.
+3. **Load unpacked** and select the `extension` folder.
+4. Click **Reload** after manifest changes.
 
-Reload the unpacked extension after code changes.
+Then: start the backend → open a normal webpage → click Mamoru → **PROTECT ME** → review preview → **Proceed**.
 
-Start the backend first, then click the Mamoru icon and **PROTECT ME**. 
+The backend currently **acknowledges** the text. It does not score threats yet.
 
-The extension will:
-1. Show **任せて。** (I'm on it)
-2. Extract the visible text from the current page
-3. Show a summary: URL, title, language, word count, text preview
-4. Ask for confirmation: "Proceed with analysis?"
-5. Send the extraction to the backend
-6. Show **終わった。** (Done) when complete
+## Tests
 
-If the backend is not running, you will see: `Mamoru could not connect to the local safety service.`
+```powershell
+.\scripts\run_tests.ps1
+```
 
-After changing `manifest.json`, click **Reload** on the extension card so the new permissions are applied.
+Or:
+
+```powershell
+$env:MAMORU_API_TOKEN = "test-token-ci"
+.\.venv\Scripts\python.exe -m pytest
+```
 
 ## Privacy
 
-Mamoru does not scan pages automatically. Analysis happens only after the user explicitly clicks **PROTECT ME** and confirms the extraction summary.
+- No scan on page load. The extractor is injected only after **PROTECT ME**.
+- Visible text only (not CSS-hidden text, aria-labels, or alt text). See `docs/THREAT_MODEL.md`.
+- Page text is not stored. Logs record only HTTP method and path, not bodies.
+- API keys must stay in `.env`, never in the extension except the local shared token.
 
-**Key privacy guarantees (M5):**
-- No automatic requests (only on user click)
-- No content storage (content processed in memory only)
-- No background monitoring (content script runs on demand)
-- No browsing history collection (only current page, then deleted)
-- No cookies or persistent tracking
+## License
 
-**Future milestones** (M6–M10) will add:
-- M6: Deterministic rule engine (explicit findings)
-- M7: LLM integration (for understanding, not judgment)
-- M8: Report generation (findings + reasoning)
-- M9: Uncertainty quantification (honest about limitations)
-- M10: Privacy controls (user-controlled logging, data export, auto-delete)
-
+MIT. See `LICENSE`.
