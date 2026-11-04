@@ -4,7 +4,7 @@ Mamoru is a consent-first browser threat analyzer. It stays inactive until you c
 
 This is an engineering portfolio project. It is not a finished security product.
 
-## Current status (honest)
+## Current status 
 
 **Phase 1 — Hardening** is in place:
 
