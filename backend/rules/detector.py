@@ -1,177 +1,112 @@
-"""
-Responsible AI Signal Detector Engine
-
-Analyzes webpage content for signals related to AI transparency, privacy, fairness,
-and accountability. No LLM calls. No judgments. Pattern matching only.
-"""
+"""Deterministic text rules for common phishing and prompt-injection signals."""
 
 import json
-import os
-from typing import List, Optional, Dict, Any
-from .confidence import (
-    calculate_keyword_confidence,
-    ConfidenceLevel,
-)
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+Severity = Literal["Low", "Medium", "High"]
+RULES_PATH = Path(__file__).with_name("rules.json")
 
 
-class ResponsibleAIDetector:
-    """
-    Main detector engine for responsible AI signals.
-    
-    Loads rules from JSON configuration and executes pattern matching
-    against webpage content. Returns list of signals with confidence.
-    
-    No LLM. No external API calls. Pattern matching only.
-    """
-    
-    def __init__(self):
-        """Initialize detector by loading rules configuration."""
+@dataclass(frozen=True)
+class Rule:
+    rule_id: str
+    description: str
+    severity: Severity
+    category: str
+    pattern: re.Pattern[str]
+
+
+@dataclass(frozen=True)
+class Finding:
+    rule_id: str
+    description: str
+    severity: Severity
+    category: str
+    evidence: str
+
+
+class RuleEngine:
+    """Load fixed rules and return the first exact matching span per rule."""
+
+    def __init__(self) -> None:
         self.rules = self._load_rules()
-    
-    def _load_rules(self) -> List[Dict[str, Any]]:
-        """Load rule definitions from rules.json."""
-        rules_path = os.path.join(
-            os.path.dirname(__file__),
-            "rules.json"
-        )
-        
+
+    @staticmethod
+    def _load_rules() -> list[Rule]:
         try:
-            with open(rules_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            return [rule for rule in config.get("rules", []) if rule.get("enabled", True)]
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            raise RuntimeError(f"Failed to load rules configuration: {e}")
-    
-    def analyze(
-        self,
-        content: str,
-        url: str,
-        title: str = "",
-    ) -> List[Dict[str, str]]:
-        """
-        Analyze webpage content for responsible AI signals.
-        
-        Args:
-            content: Full extracted webpage text
-            url: Page URL
-            title: Page title
-        
-        Returns:
-            List of signal dictionaries (can be used with Pydantic models)
-        """
-        signals = []
-        analyzed_text = f"{title}\n{url}\n{content}".lower()
-        
+            with RULES_PATH.open(encoding="utf-8") as rules_file:
+                config = json.load(rules_file)
+        except (OSError, json.JSONDecodeError) as error:
+            raise RuntimeError("Unable to load Mamoru rule configuration.") from error
+
+        if not isinstance(config, dict) or not isinstance(config.get("rules"), list):
+            raise RuntimeError("Mamoru rule configuration must contain a rules list.")
+
+        rules: list[Rule] = []
+        seen_ids: set[str] = set()
+        valid_severities = {"Low", "Medium", "High"}
+        for item in config["rules"]:
+            if not isinstance(item, dict):
+                raise RuntimeError("Each Mamoru rule must be an object.")
+
+            rule_id = item.get("id")
+            description = item.get("description")
+            severity = item.get("severity")
+            category = item.get("category")
+            pattern_text = item.get("pattern")
+            if (
+                not isinstance(rule_id, str)
+                or not rule_id
+                or rule_id in seen_ids
+                or not isinstance(description, str)
+                or not description
+                or not isinstance(severity, str)
+                or severity not in valid_severities
+                or not isinstance(category, str)
+                or not category
+                or not isinstance(pattern_text, str)
+                or not pattern_text
+            ):
+                raise RuntimeError("Mamoru rule configuration contains an invalid rule.")
+
+            try:
+                pattern = re.compile(pattern_text, re.IGNORECASE)
+            except re.error as error:
+                raise RuntimeError(
+                    f"Mamoru rule '{rule_id}' has an invalid pattern."
+                ) from error
+
+            seen_ids.add(rule_id)
+            rules.append(
+                Rule(
+                    rule_id=rule_id,
+                    description=description,
+                    severity=severity,
+                    category=category,
+                    pattern=pattern,
+                )
+            )
+
+        if not rules:
+            raise RuntimeError("Mamoru rule configuration must not be empty.")
+        return rules
+
+    def analyze(self, content: str) -> list[Finding]:
+        """Return at most one finding per rule, using its first matched span."""
+        findings: list[Finding] = []
         for rule in self.rules:
-            signal = self._execute_rule(rule, analyzed_text, content)
-            if signal:
-                signals.append(signal)
-        
-        return signals
-    
-    def _execute_rule(
-        self,
-        rule: Dict[str, Any],
-        analyzed_text: str,
-        original_content: str,
-    ) -> Optional[Dict[str, str]]:
-        """
-        Execute a single rule against the content.
-        
-        Returns dictionary if pattern matches, None otherwise.
-        Dictionary can be converted to ResponsibleAISignal Pydantic model.
-        """
-        rule_id = rule.get("ruleId")
-        category = rule.get("category")
-        patterns = rule.get("patterns", {})
-        keywords = patterns.get("keywords", [])
-        min_matches = patterns.get("minMatches", 1)
-        
-        # Check keyword matches
-        confidence = calculate_keyword_confidence(
-            analyzed_text,
-            keywords,
-            min_matches,
-        )
-        
-        if not confidence:
-            return None
-        
-        # Collect evidence (matched keywords)
-        matched_keywords = [
-            kw for kw in keywords
-            if kw.lower() in analyzed_text
-        ]
-        
-        # Build evidence string
-        evidence = f"Found {len(matched_keywords)} matching signals: {', '.join(matched_keywords[:5])}"
-        if len(matched_keywords) > 5:
-            evidence += f" and {len(matched_keywords) - 5} more"
-        
-        # Get rule descriptions
-        confidence_rules = rule.get("confidenceRules", {})
-        observation = self._generate_observation(
-            rule_id,
-            category,
-            matched_keywords,
-        )
-        interpretation = confidence_rules.get(
-            confidence,
-            "Signal detected in content.",
-        )
-        false_positives = ", ".join(
-            rule.get("falsePositives", ["Unknown false positive possibilities"])[:2]
-        )
-        significance = self._generate_significance(category)
-        
-        return {
-            "signalId": rule_id,
-            "category": category,
-            "confidence": confidence,
-            "evidence": evidence,
-            "observation": observation,
-            "interpretation": interpretation,
-            "falsePossibilities": f"This signal could be inaccurate if: {false_positives}",
-            "significance": significance,
-        }
-    
-    def _generate_observation(
-        self,
-        rule_id: str,
-        category: str,
-        matched_keywords: List[str],
-    ) -> str:
-        """Generate factual observation statement based on matched content."""
-        observations = {
-            "AI_DISCLOSURE_001": f"Content explicitly mentions AI tools or use: {', '.join(matched_keywords[:3])}",
-            "TRANSPARENCY_001": f"Content discusses algorithm/methodology: {', '.join(matched_keywords[:3])}",
-            "PRIVACY_DATA_001": f"Privacy or data practices mentioned: {', '.join(matched_keywords[:3])}",
-            "FAIRNESS_BIAS_001": f"Fairness or bias-related language present: {', '.join(matched_keywords[:3])}",
-            "OVERSIGHT_ACCOUNTABILITY_001": f"Oversight or accountability mechanisms mentioned: {', '.join(matched_keywords[:3])}",
-            "MANIPULATION_001": f"Personalization or targeting language detected: {', '.join(matched_keywords[:3])}",
-            "EVIDENCE_CLAIMS_001": f"AI-driven claims or evidence discussion present: {', '.join(matched_keywords[:3])}",
-            "AI_GENERATED_CONTENT_001": f"AI generation signals detected: {', '.join(matched_keywords[:3])}",
-        }
-        return observations.get(rule_id, f"Signal detected in {category} category.")
-    
-    def _generate_significance(self, category: str) -> str:
-        """Generate explanation of why this signal matters to users."""
-        significance_map = {
-            "AI Use & Disclosure": "Knowing when AI is used helps you understand how content was created or delivered.",
-            "Transparency": "Understanding how AI systems work helps you evaluate whether you agree with their decisions.",
-            "Privacy & Data Use": "Clear data practices help you make informed decisions about sharing personal information.",
-            "Fairness & Bias": "Awareness of bias testing helps you understand if AI systems might have disparate impacts.",
-            "Human Oversight & Accountability": "Knowing humans review decisions and appeals exist helps ensure accountability for AI mistakes.",
-            "Manipulation & Deceptive Practices": "Understanding personalization and targeting helps protect you from manipulation.",
-            "Evidence & Claims": "Supporting evidence and methodology help you evaluate AI-driven claims and predictions.",
-            "AI-Generated Content Signals": "Knowing content is AI-generated helps you evaluate its trustworthiness and context.",
-        }
-        return significance_map.get(
-            category,
-            "This signal relates to responsible AI practices.",
-        )
-
-
-def create_detector() -> ResponsibleAIDetector:
-    """Factory function to create and initialize detector."""
-    return ResponsibleAIDetector()
+            match = rule.pattern.search(content)
+            if match:
+                findings.append(
+                    Finding(
+                        rule_id=rule.rule_id,
+                        description=rule.description,
+                        severity=rule.severity,
+                        category=rule.category,
+                        evidence=match.group(0),
+                    )
+                )
+        return findings

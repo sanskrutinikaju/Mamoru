@@ -1,13 +1,8 @@
-"""
-Responsible AI Signal Detection Rules Package
+"""Deterministic rules for Mamoru page-text analysis."""
 
-Provides rule definitions and detection engine for identifying
-responsible AI signals in webpage content.
-"""
-
-from .detector import ResponsibleAIDetector, create_detector
+from .detector import Finding, RuleEngine
 
 __all__ = [
-    "ResponsibleAIDetector",
-    "create_detector",
+    "Finding",
+    "RuleEngine",
 ]

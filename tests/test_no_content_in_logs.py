@@ -29,7 +29,8 @@ def test_analyze_success_does_not_log_page_content(caplog):
     assert CANARY not in response.text
 
 
-def test_validation_error_does_not_echo_page_content():
+def test_validation_error_does_not_echo_page_content(caplog):
+    caplog.set_level(logging.DEBUG)
     body = {
         "url": "https://safe.example.test/page",
         "title": "Example page",
@@ -40,4 +41,40 @@ def test_validation_error_does_not_echo_page_content():
     }
     response = client.post("/analyze", json=body, headers=TOKEN_HEADER)
     assert response.status_code == 422
+    assert CANARY not in caplog.text
     assert CANARY not in response.text
+
+
+def test_unauthorized_request_does_not_log_or_echo_page_content(caplog):
+    caplog.set_level(logging.DEBUG)
+    body = {
+        "url": "https://safe.example.test/page",
+        "title": "Synthetic page",
+        "language": "en",
+        "wordCount": 1,
+        "content": CANARY,
+        "consentTimestamp": "2026-11-04T00:00:00Z",
+    }
+    response = client.post("/analyze", json=body)
+    assert response.status_code == 401
+    assert CANARY not in caplog.text
+    assert CANARY not in response.text
+
+
+def test_matched_evidence_is_returned_but_not_logged(caplog):
+    caplog.set_level(logging.DEBUG)
+    evidence = "enter your account password"
+    body = {
+        "url": "https://safe.example.test/page",
+        "title": "Synthetic page",
+        "language": "en",
+        "wordCount": 6,
+        "content": f"Please {evidence} to continue. {CANARY}",
+        "consentTimestamp": "2026-11-04T00:00:00Z",
+    }
+    response = client.post("/analyze", json=body, headers=TOKEN_HEADER)
+
+    assert response.status_code == 200
+    assert response.json()["findings"][0]["evidence"] == evidence
+    assert evidence not in caplog.text
+    assert CANARY not in caplog.text

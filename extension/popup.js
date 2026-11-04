@@ -10,6 +10,7 @@ const messageEl = document.getElementById("message");
 const protectButton = document.getElementById("protect-me");
 const summaryPanelEl = document.getElementById("extraction-summary");
 const confirmPanelEl = document.getElementById("extraction-confirm");
+const resultsPanelEl = document.getElementById("analysis-results");
 
 function setInactive() {
   statusEl.textContent = "INACTIVE";
@@ -29,6 +30,129 @@ function setActive(phrase) {
 function showMessage(text, isError) {
   messageEl.textContent = text;
   messageEl.classList.toggle("error", Boolean(isError));
+}
+
+function clearFindings() {
+  resultsPanelEl.replaceChildren();
+  resultsPanelEl.style.display = "none";
+}
+
+function appendFindingText(container, className, label, value) {
+  const paragraph = document.createElement("p");
+  paragraph.className = className;
+
+  const labelEl = document.createElement("strong");
+  labelEl.textContent = label;
+  const valueEl = document.createElement("span");
+  valueEl.textContent = value;
+
+  paragraph.append(labelEl, valueEl);
+  container.append(paragraph);
+}
+
+function displaySafetyReport(safetyReport, llmStatus, llmMessage) {
+  const severityClasses = {
+    Low: "low",
+    Medium: "medium",
+    High: "high",
+  };
+  const validLevels = ["Low", "Medium", "High", "Cannot tell"];
+  const validSources = ["rule", "llm", "rule_and_llm"];
+  if (
+    !safetyReport ||
+    !validLevels.includes(safetyReport.overallLevel) ||
+    typeof safetyReport.explanation !== "string" ||
+    !Array.isArray(safetyReport.findings) ||
+    !["completed", "unavailable", "failed"].includes(llmStatus) ||
+    typeof llmMessage !== "string" ||
+    !safetyReport.findings.every(
+      (finding) =>
+        finding &&
+        typeof finding.category === "string" &&
+        ["Low", "Medium", "High"].includes(finding.severity) &&
+        typeof finding.evidence === "string" &&
+        typeof finding.explanation === "string" &&
+        ["Low", "Medium", "High"].includes(finding.confidence) &&
+        validSources.includes(finding.source)
+    )
+  ) {
+    throw new Error("Mamoru received an invalid analysis response.");
+  }
+
+  clearFindings();
+  const title = document.createElement("h2");
+  title.className = "results-title";
+  title.textContent = "SAFETY REPORT";
+  resultsPanelEl.append(title);
+
+  const overall = document.createElement("p");
+  overall.className = `report-level severity-${severityClasses[safetyReport.overallLevel] || "unknown"}`;
+  overall.textContent = `Overall level: ${safetyReport.overallLevel}`;
+  resultsPanelEl.append(overall);
+
+  const overallExplanation = document.createElement("p");
+  overallExplanation.className = "results-note";
+  overallExplanation.textContent = safetyReport.explanation;
+  resultsPanelEl.append(overallExplanation);
+
+  const note = document.createElement("p");
+  note.className = "results-note";
+  note.textContent =
+    "Signals and confidence are limited indicators, not proof that a page is harmful or safe.";
+  resultsPanelEl.append(note);
+
+  if (llmStatus !== "completed") {
+    const llmNotice = document.createElement("p");
+    llmNotice.className = "results-note";
+    llmNotice.textContent = llmMessage;
+    resultsPanelEl.append(llmNotice);
+  }
+
+  if (safetyReport.overallLevel === "Cannot tell") {
+    const emptyState = document.createElement("p");
+    emptyState.className = "no-findings";
+    emptyState.textContent =
+      "Mamoru cannot tell from these results. No findings is not a safety guarantee.";
+    resultsPanelEl.append(emptyState);
+  }
+
+  safetyReport.findings.forEach((finding) => {
+    const card = document.createElement("article");
+    card.className = `finding-card severity-${severityClasses[finding.severity]}`;
+    appendFindingText(
+      card,
+      "finding-severity",
+      "Severity: ",
+      finding.severity
+    );
+    appendFindingText(
+      card,
+      "finding-category",
+      "Category: ",
+      finding.category
+    );
+    appendFindingText(
+      card,
+      "finding-description",
+      "Explanation: ",
+      finding.explanation
+    );
+    appendFindingText(
+      card,
+      "finding-confidence",
+      "Confidence: ",
+      finding.confidence
+    );
+    appendFindingText(
+      card,
+      "finding-evidence",
+      "Matched text: ",
+      finding.evidence
+    );
+    resultsPanelEl.append(card);
+  });
+
+  resultsPanelEl.style.display = "block";
 }
 
 /**
@@ -71,7 +195,7 @@ function displayExtractionSummary(extraction) {
 
   summaryPanelEl.style.display = "block";
   confirmPanelEl.style.display = "block";
-  messageEl.textContent = "Review the extraction summary. Proceed?";
+  messageEl.textContent = "Review the preview and data-sharing notice. Proceed?";
 }
 
 async function sendToBackend(extraction) {
@@ -106,6 +230,7 @@ async function sendToBackend(extraction) {
 }
 
 protectButton.addEventListener("click", async () => {
+  clearFindings();
   setActive("任せて。");
   showMessage("Extracting page content...", false);
 
@@ -120,15 +245,17 @@ protectButton.addEventListener("click", async () => {
       confirmBtn.onclick = async () => {
         summaryPanelEl.style.display = "none";
         confirmPanelEl.style.display = "none";
-        messageEl.textContent = "Sending to local Mamoru service...";
+        messageEl.textContent = "Analyzing with local rules and configured OpenAI...";
 
         try {
           const result = await sendToBackend(extraction);
-          phraseEl.textContent = "終わった。";
-          showMessage(
-            result.message || "Mamoru received the page text.",
-            false
+          displaySafetyReport(
+            result.safetyReport,
+            result.llmStatus,
+            result.llmMessage
           );
+          phraseEl.textContent = "終わった。";
+          showMessage("Analysis complete. Review findings below.", false);
         } catch (error) {
           phraseEl.textContent = "注意して。";
           showMessage(error.message || CONNECT_ERROR, true);

@@ -6,6 +6,9 @@ env/
 # Environment secrets
 .env
 
+# Local extension token
+extension/config.js
+
 # Python
 __pycache__/
 *.py[cod]

@@ -1,7 +1,9 @@
 """A request without the shared token must be rejected."""
 
+import pytest
 from fastapi.testclient import TestClient
 
+from backend.config import get_extension_origin
 from backend.main import app
 
 client = TestClient(app)
@@ -39,3 +41,61 @@ def test_analyze_with_token_is_accepted():
     body = response.json()
     assert body["status"] == "ok"
     assert "analysisId" in body
+    assert body["findings"] == []
+    assert body["llmStatus"] == "unavailable"
+    assert body["llmFindings"] == []
+    assert "not configured" in body["llmMessage"]
+    assert body["safetyReport"]["overallLevel"] == "Cannot tell"
+    assert body["safetyReport"]["findings"] == []
+
+
+def test_analyze_returns_deterministic_rule_evidence():
+    body = {
+        **VALID_BODY,
+        "content": "Please enter your account password to continue.",
+    }
+    response = client.post("/analyze", json=body, headers=TOKEN_HEADER)
+
+    assert response.status_code == 200
+    finding = response.json()["findings"][0]
+    assert finding == {
+        "ruleId": "credential_request",
+        "description": "Requests a password, passcode, credentials, or verification code.",
+        "severity": "High",
+        "category": "credential_request",
+        "evidence": "enter your account password",
+    }
+    assert response.json()["safetyReport"]["overallLevel"] == "High"
+
+
+def test_cors_allows_only_the_configured_extension_origin():
+    allowed_origin = "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    response = client.options(
+        "/analyze",
+        headers={
+            "Origin": allowed_origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,x-mamoru-token",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == allowed_origin
+
+
+def test_cors_rejects_other_extension_origins():
+    response = client.options(
+        "/analyze",
+        headers={
+            "Origin": "chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,x-mamoru-token",
+        },
+    )
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_invalid_extension_origin_is_rejected(monkeypatch):
+    monkeypatch.setenv("MAMORU_EXTENSION_ORIGIN", "https://example.test")
+    with pytest.raises(ValueError, match="32-character extension ID"):
+        get_extension_origin()

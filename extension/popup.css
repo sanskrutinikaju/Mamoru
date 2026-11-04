@@ -160,3 +160,105 @@ button:disabled {
 .cancel-btn:hover:not(:disabled) {
   background: rgba(139, 125, 125, 0.12);
 }
+
+.results-panel {
+  max-height: 260px;
+  margin: 12px 0;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid #1f5a66;
+  background: rgba(0, 255, 209, 0.03);
+  border-radius: 4px;
+}
+
+.results-title {
+  margin: 0 0 8px;
+  color: #7fffd4;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.report-level {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.report-level.severity-high {
+  color: #ff8178;
+}
+
+.report-level.severity-medium {
+  color: #e4b85c;
+}
+
+.report-level.severity-low {
+  color: #7fffd4;
+}
+
+.report-level.severity-unknown {
+  color: #a8b8c4;
+}
+
+.results-note,
+.no-findings {
+  margin: 0 0 10px;
+  color: #a8b8c4;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.finding-card {
+  margin-top: 10px;
+  padding: 10px;
+  border-left: 3px solid #e4b85c;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.finding-card.severity-high {
+  border-left-color: #ff8178;
+}
+
+.finding-card.severity-low {
+  border-left-color: #7fffd4;
+}
+
+.finding-severity,
+.finding-category,
+.finding-description,
+.finding-rule-id,
+.finding-confidence,
+.finding-evidence {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.finding-severity {
+  color: #ffb4a8;
+  font-weight: 700;
+}
+
+.finding-card.severity-medium .finding-severity {
+  color: #e4b85c;
+}
+
+.finding-card.severity-low .finding-severity {
+  color: #7fffd4;
+}
+
+.finding-category {
+  color: #7fffd4;
+}
+
+.finding-description,
+.finding-rule-id,
+.finding-evidence {
+  color: #a8b8c4;
+}
+
+.finding-evidence {
+  white-space: pre-wrap;
+  font-family: "Courier New", monospace;
+}

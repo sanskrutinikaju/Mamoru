@@ -37,8 +37,11 @@
       <div id="extraction-confirm" class="extraction-panel" style="display: none">
         <div class="confirm-section">
           <p class="confirm-label">
-            I understand that Mamoru will analyze this page content for safety
-            information.
+            Proceeding sends the full extracted visible text to the local Mamoru
+            backend. If OpenAI is configured, up to the first 12,000 characters
+            are sent to OpenAI for analysis. The page URL and title are not sent
+            to OpenAI. OpenAI's privacy and retention terms apply to text it
+            receives.
           </p>
           <div class="button-group">
             <button id="confirm-button" type="button" class="confirm-btn">
@@ -50,6 +53,13 @@
           </div>
         </div>
       </div>
+
+      <section
+        id="analysis-results"
+        class="results-panel"
+        aria-live="polite"
+        style="display: none"
+      ></section>
 
       <button id="protect-me" type="button">PROTECT ME</button>
       <p class="hint">

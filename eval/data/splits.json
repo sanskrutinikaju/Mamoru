@@ -1,0 +1,29 @@
+{
+  "description": "Fixed evaluation split. Held-out IDs are evaluated only and never used for rule or prompt tuning.",
+  "held_out_ids": [
+    "heldout-benign-01",
+    "heldout-benign-02",
+    "heldout-benign-03",
+    "heldout-benign-04",
+    "heldout-benign-05",
+    "heldout-benign-06",
+    "heldout-benign-07",
+    "heldout-benign-08",
+    "heldout-benign-09",
+    "heldout-benign-10",
+    "heldout-benign-11",
+    "heldout-benign-12",
+    "heldout-threat-01",
+    "heldout-threat-02",
+    "heldout-threat-03",
+    "heldout-threat-04",
+    "heldout-threat-05",
+    "heldout-threat-06",
+    "heldout-threat-07",
+    "heldout-threat-08",
+    "heldout-threat-09",
+    "heldout-threat-10",
+    "heldout-threat-11",
+    "heldout-threat-12"
+  ]
+}
