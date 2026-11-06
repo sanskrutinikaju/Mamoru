@@ -8,6 +8,7 @@ env/
 
 # Local extension token
 extension/config.js
+eval/.cache/
 
 # Python
 __pycache__/

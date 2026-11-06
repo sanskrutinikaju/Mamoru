@@ -245,7 +245,7 @@ protectButton.addEventListener("click", async () => {
       confirmBtn.onclick = async () => {
         summaryPanelEl.style.display = "none";
         confirmPanelEl.style.display = "none";
-        messageEl.textContent = "Analyzing with local rules and configured OpenAI...";
+        messageEl.textContent = "Analyzing with local rules. Page text stays on this device...";
 
         try {
           const result = await sendToBackend(extraction);

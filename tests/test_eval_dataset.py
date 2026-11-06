@@ -3,11 +3,21 @@ from pathlib import Path
 
 import pytest
 
-from backend.llm.provider import LLMProviderError, TokenUsage
+from backend.llm.provider import (
+    LLMCallLimitError,
+    LLMInvalidResponseError,
+    LLMProviderError,
+    LLMRateLimitError,
+    TokenUsage,
+)
 from backend.rules import RuleEngine
 from eval.run import (
-    calculate_metrics,
-    evaluate_llm_and_hybrid,
+    EvaluationCache,
+    EvaluationPaused,
+    VariantResult,
+    _category_rows,
+    _format_variant_row,
+    evaluate_gemini,
     load_cases,
     load_split,
 )
@@ -18,16 +28,72 @@ CASES_PATH = PROJECT_ROOT / "eval" / "data" / "cases.jsonl"
 SPLIT_PATH = PROJECT_ROOT / "eval" / "data" / "splits.json"
 
 
-def test_synthetic_dataset_has_120_unique_labeled_cases_and_fixed_split():
-    cases = load_cases(CASES_PATH)
-    train_cases, held_out_cases = load_split(cases, SPLIT_PATH)
+def _cases():
+    return load_cases(CASES_PATH)
 
-    assert len(cases) == 120
-    assert len({case["id"] for case in cases}) == 120
+
+def _held_out():
+    return load_split(_cases(), SPLIT_PATH)[1]
+
+
+class FakeProvider:
+    model = "gemini-test-model"
+
+    def __init__(self, result=None, failure=None):
+        self.result = result or LLMAnalysis(findings=[])
+        self.failure = failure
+        self.calls = 0
+        self.last_usage = None
+        self.last_attempt_count = 0
+
+    def analyze(self, page_text):
+        assert page_text
+        self.calls += 1
+        self.last_attempt_count = 1
+        if self.failure:
+            raise self.failure
+        self.last_usage = TokenUsage(100, 10, 2)
+        return self.result
+
+
+def test_synthetic_dataset_has_144_cases_and_separate_held_out_group():
+    cases = _cases()
+    train_cases, held_out_cases = load_split(cases, SPLIT_PATH)
+    original_held_out_ids = {
+        f"heldout-{label}-{index:02}"
+        for label in ("benign", "threat")
+        for index in range(1, 13)
+    }
+    held_out_groups = {
+        group: sum(case["group"] == group for case in held_out_cases)
+        for group in {"core", "handwritten_scam_style"}
+    }
+
+    assert len(cases) == 144
+    assert len({case["id"] for case in cases}) == 144
+    assert all(case["synthetic"] is True for case in cases)
     assert len(train_cases) == 96
-    assert len(held_out_cases) == 24
-    assert sum(case["label"] == "benign" for case in held_out_cases) == 12
-    assert sum(case["label"] == "threat" for case in held_out_cases) == 12
+    assert len(held_out_cases) == 48
+    assert original_held_out_ids.issubset({case["id"] for case in held_out_cases})
+    assert original_held_out_ids.isdisjoint({case["id"] for case in train_cases})
+    assert held_out_groups == {"core": 24, "handwritten_scam_style": 24}
+    assert sum(case["label"] == "benign" for case in held_out_cases) == 16
+    assert sum(case["label"] == "threat" for case in held_out_cases) == 32
+    scam_cases = [
+        case for case in cases if case["group"] == "handwritten_scam_style"
+    ]
+    assert len(scam_cases) == 24
+    assert {case["authorship"] for case in scam_cases} == {"AI-written"}
+
+
+def test_dataset_loader_rejects_case_not_marked_synthetic(tmp_path):
+    source = _cases()[0]
+    source["synthetic"] = False
+    cases_path = tmp_path / "cases.jsonl"
+    cases_path.write_text(json.dumps(source), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="non-synthetic"):
+        load_cases(cases_path)
 
 
 def test_split_rejects_unknown_held_out_ids(tmp_path):
@@ -38,10 +104,12 @@ def test_split_rejects_unknown_held_out_ids(tmp_path):
     )
 
     with pytest.raises(ValueError, match="not found"):
-        load_split(load_cases(CASES_PATH), split_path)
+        load_split(_cases(), split_path)
 
 
 def test_metrics_treat_no_finding_as_abstention_and_negative_prediction():
+    from eval.run import calculate_metrics
+
     cases = [
         {"label": "threat"},
         {"label": "threat"},
@@ -53,7 +121,6 @@ def test_metrics_treat_no_finding_as_abstention_and_negative_prediction():
         cases,
         [True, False, True, False],
         [0.001, 0.002, 0.003, 0.004],
-        [0.1, 0.2, 0.3, 0.4],
     )
 
     assert result.true_positive == 1
@@ -65,56 +132,162 @@ def test_metrics_treat_no_finding_as_abstention_and_negative_prediction():
     assert result.false_positive_rate == 0.5
     assert result.abstain_rate == 0.5
     assert result.mean_latency_ms == pytest.approx(2.5)
-    assert result.average_cost_usd == pytest.approx(0.25)
 
 
-def test_live_comparison_reuses_one_provider_call_per_case():
-    class FakeProvider:
-        last_usage = TokenUsage(prompt_tokens=100, completion_tokens=10)
+def test_result_tables_have_matching_columns_when_live_results_are_pending():
+    cases = _held_out()
+    rules = [
+        VariantResult(False, "Cannot tell", 0.001, "rules")
+        for _ in cases
+    ]
+    row_without_live = _format_variant_row(
+        "Gemini only",
+        "Not run",
+        cases,
+        None,
+    )
+    row_with_results = _format_variant_row(
+        "Rules only",
+        "Mamoru rules",
+        cases,
+        rules,
+    )
+    category_rows = _category_rows(
+        cases,
+        [
+            ("Rules only", "Mamoru rules", rules),
+            ("Gemini only", "Not run", None),
+        ],
+    )
 
-        def __init__(self):
-            self.calls = 0
+    assert len(row_without_live.strip("|").split("|")) == 12
+    assert len(row_with_results.strip("|").split("|")) == 12
+    assert all(len(row.strip("|").split("|")) == 12 for row in category_rows)
 
+
+def test_gemini_results_are_cached_and_reused_without_page_text():
+    cases = _held_out()[:3]
+    cache_path = Path("unused")
+    # Keep test artifacts outside the repository and out of the committed cache.
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_path = Path(temp_dir) / "gemini-cache.json"
+        provider = FakeProvider()
+        cache = EvaluationCache(cache_path, provider.model, cases)
+        first = evaluate_gemini(cases, RuleEngine(), provider, cache)
+
+        assert provider.calls == len(cases)
+        assert first.cache_misses == len(cases)
+        assert first.api_attempts == len(cases)
+        assert first.llm[0].token_usage == TokenUsage(100, 10, 2)
+
+        cached_contents = cache_path.read_text(encoding="utf-8")
+        for case in cases:
+            assert case["text"] not in cached_contents
+
+        second_provider = FakeProvider()
+        second_cache = EvaluationCache(cache_path, second_provider.model, cases)
+        second = evaluate_gemini(
+            cases,
+            RuleEngine(),
+            second_provider,
+            second_cache,
+        )
+        assert second_provider.calls == 0
+        assert second.cache_hits == len(cases)
+        assert second.cache_misses == 0
+        assert second.llm == first.llm
+
+
+def test_rate_limit_stops_immediately_and_rerun_uses_completed_cache(tmp_path):
+    cases = _held_out()[:3]
+
+    class RateLimitAfterOne(FakeProvider):
         def analyze(self, page_text):
             del page_text
+            if self.calls == 0:
+                self.calls += 1
+                self.last_attempt_count = 1
+                self.last_usage = TokenUsage(20, 5)
+                return LLMAnalysis(findings=[])
             self.calls += 1
-            self.last_usage = TokenUsage(prompt_tokens=100, completion_tokens=10)
-            return LLMAnalysis(findings=[])
+            self.last_attempt_count = 1
+            raise LLMRateLimitError("Synthetic rate limit.")
 
-    _, held_out_cases = load_split(load_cases(CASES_PATH), SPLIT_PATH)
-    provider = FakeProvider()
-    llm_metrics, hybrid_metrics, failed_calls = evaluate_llm_and_hybrid(
-        held_out_cases,
+    cache_path = tmp_path / "gemini-cache.json"
+    provider = RateLimitAfterOne()
+    cache = EvaluationCache(cache_path, provider.model, cases)
+    with pytest.raises(EvaluationPaused) as paused:
+        evaluate_gemini(cases, RuleEngine(), provider, cache)
+    assert paused.value.completed == 1
+    assert paused.value.remaining == 2
+    assert "1 cases completed; 2 remain" in str(paused.value)
+    assert len(cache.entries) == 1
+    assert provider.calls == 2
+    assert sum(cache.rate_limit_events.values()) == 1
+
+    resumed_provider = FakeProvider()
+    resumed_cache = EvaluationCache(cache_path, resumed_provider.model, cases)
+    resumed = evaluate_gemini(
+        cases,
         RuleEngine(),
-        provider,
-        input_price_per_million=0.15,
-        output_price_per_million=0.60,
+        resumed_provider,
+        resumed_cache,
     )
-
-    assert provider.calls == len(held_out_cases)
-    assert failed_calls == 0
-    assert llm_metrics.total == len(held_out_cases)
-    assert llm_metrics.abstentions == len(held_out_cases)
-    assert llm_metrics.average_cost_usd == pytest.approx(0.000021)
-    assert hybrid_metrics.recall >= llm_metrics.recall
+    assert resumed.cache_hits == 1
+    assert resumed.cache_misses == 2
+    assert resumed_provider.calls == 2
+    assert resumed.rate_limit_responses == 1
+    assert resumed.api_attempts == 4
 
 
-def test_live_comparison_counts_provider_failures_without_guessing_cost():
-    class FailedProvider:
-        last_usage = None
+def test_per_run_call_cap_stops_with_completed_and_remaining_counts(tmp_path):
+    cases = _held_out()[:3]
 
+    class CappedProvider(FakeProvider):
         def analyze(self, page_text):
-            del page_text
-            raise LLMProviderError("Synthetic provider failure.")
+            if self.calls == 1:
+                raise LLMCallLimitError("Gemini per-run call limit reached.")
+            return super().analyze(page_text)
 
-    _, held_out_cases = load_split(load_cases(CASES_PATH), SPLIT_PATH)
-    llm_metrics, _, failed_calls = evaluate_llm_and_hybrid(
-        held_out_cases,
-        RuleEngine(),
-        FailedProvider(),
-        input_price_per_million=0.15,
-        output_price_per_million=0.60,
-    )
+    provider = CappedProvider()
+    cache = EvaluationCache(tmp_path / "gemini-cache.json", provider.model, cases)
+    with pytest.raises(EvaluationPaused) as paused:
+        evaluate_gemini(cases, RuleEngine(), provider, cache)
 
-    assert failed_calls == len(held_out_cases)
-    assert llm_metrics.average_cost_usd is None
+    assert provider.calls == 1
+    assert paused.value.completed == 1
+    assert paused.value.remaining == 2
+    assert "per-run call cap" in str(paused.value)
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_status"),
+    [
+        (LLMInvalidResponseError("Synthetic invalid result."), "invalid"),
+        (LLMProviderError("Synthetic provider failure."), "failed"),
+    ],
+)
+def test_live_evaluation_counts_invalid_and_provider_failures(
+    tmp_path,
+    failure,
+    expected_status,
+):
+    cases = _held_out()[:1]
+    provider = FakeProvider(failure=failure)
+    cache = EvaluationCache(tmp_path / "cache.json", provider.model, cases)
+
+    result = evaluate_gemini(cases, RuleEngine(), provider, cache)
+
+    assert result.llm[0].status == expected_status
+    assert result.llm[0].prediction is False
+    assert result.hybrid[0].prediction is bool(RuleEngine().analyze(cases[0]["text"]))
+
+
+def test_gemini_cache_refuses_non_synthetic_cases(tmp_path):
+    case = dict(_held_out()[0])
+    case["synthetic"] = False
+
+    with pytest.raises(ValueError, match="only synthetic"):
+        EvaluationCache(tmp_path / "cache.json", "gemini-test", [case])

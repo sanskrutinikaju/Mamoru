@@ -6,18 +6,18 @@ This is an engineering portfolio project. It is not a finished security product.
 
 ## Current status 
 
-**Phase 5 — Evaluation harness** is implemented; live LLM measurements require a locally configured API key:
+**Phase 5 — Live evaluation** is in progress:
 
 - User click → visible text preview → confirm → `POST /analyze`
 - Shared secret token + CORS limited to the configured extension origin
 - Character and request-body size limits, plus validation that does not echo page text
 - Deterministic rules return severity, category, description, and matched text evidence
-- One OpenAI provider returns validated, structured findings in addition to the deterministic rules
+- Gemini is reserved for synthetic evaluation cases; real webpage text stays on-device
 - A Safety Report summarizes severity, evidence, explanation, confidence, and a **Cannot tell** outcome
 - The extension displays the report as plain text; findings are signals, not proof
-- Provider errors return deterministic findings with an explicit fallback status
-- A 120-case synthetic dataset has a fixed 24-case held-out split for evaluation
-- The evaluator compares rules-only, LLM-only, and hybrid results without tuning on held-out examples
+- Live scans explicitly state that Gemini is disabled for real page text
+- A 144-case synthetic dataset has a fixed 48-case held-out split, including a separate 24-case hand-written scam-style group
+- The evaluator compares rules-only, Gemini-only, and hybrid results without tuning on held-out examples
 
 **Not built yet:** agentic investigation and production packaging.
 
@@ -36,7 +36,7 @@ Load the unpacked extension as described below, then open `chrome://extensions` 
 
 Generate a unique local token and put the same value in `.env` (`MAMORU_API_TOKEN`) and `extension/config.js`. The example value `dev-only-change-me` is public; never use it for a real demo. The token is stored in the local extension files so the extension can send it; it does not protect against another program running as you or someone who can read those files.
 
-Set `OPENAI_API_KEY` in `.env` to enable LLM analysis. The key stays in the backend process and is never placed in the extension. The default model is `gpt-4o-mini`; you can set `OPENAI_MODEL` in `.env` to choose another supported model. Without a key, the API reports that LLM analysis is unavailable and returns deterministic rule findings only.
+Set `GEMINI_API_KEY` and a currently available exact `GEMINI_MODEL` ID in `.env` for live evaluation of the synthetic test cases. There is deliberately no built-in model default: the evaluator stops with a clear error if the model ID is missing or malformed, and reports a model/request error if Google does not recognize it. The key stays on your computer and is used only by the evaluation script. The backend never sends live webpage text to Gemini; it uses deterministic rules for scans.
 
 ## Run the backend
 
@@ -53,11 +53,11 @@ Health check (no token): [http://127.0.0.1:8000/health](http://127.0.0.1:8000/he
 3. **Load unpacked** and select the `extension` folder.
 4. Click **Reload** after manifest changes.
 
-After setting the extension origin and token, restart the backend. Then open a normal webpage → click Mamoru → **PROTECT ME** → review the displayed preview and data-sharing notice → **Proceed**. The preview shows only the first 300 characters; proceeding sends the full extracted visible text to the local backend. If configured, the backend sends only the first 12,000 characters to OpenAI. The URL and page title are not sent to OpenAI.
+After setting the extension origin and token, restart the backend. Then open a normal webpage → click Mamoru → **PROTECT ME** → review the displayed preview and data-sharing notice → **Proceed**. The preview shows only the first 300 characters; proceeding sends the full extracted visible text to the local backend. Real page text remains on your computer and is never sent to Gemini.
 
-The backend runs deterministic text rules and OpenAI analysis. Deterministic findings remain in the response even if the LLM is unavailable or fails. Rules set a minimum severity that the LLM cannot lower. Rules and LLM output are limited signals, not a complete threat detector or proof of harm. Text sent to OpenAI is subject to the provider's privacy and retention terms.
+The backend runs deterministic text rules. It does not send scan text to any language-model provider. The Gemini evaluator sends only the synthetic examples stored in `eval/data/` after you run it. Rules are limited signals, not a complete threat detector or proof of harm.
 
-The Safety Report uses the strongest finding severity; when no finding is returned it says **Cannot tell**, not Low or safe. Confidence labels describe agreement between the rule and LLM sources, not a probability. See [SAFETY_REPORT.md](<C:/Users/sanskruti  Nikaju/Documents/Mamoru/docs/SAFETY_REPORT.md>) for meanings, thresholds, and the synthetic High-versus-Medium check.
+The Safety Report uses the strongest finding severity; when no finding is returned it says **Cannot tell**, not Low or safe. Confidence labels describe agreement between rule and model sources, not a probability; current live scans use rules only, and real page text is never sent to Gemini. See [SAFETY_REPORT.md](<C:/Users/sanskruti  Nikaju/Documents/Mamoru/docs/SAFETY_REPORT.md>) for meanings and thresholds.
 
 ## Tests
 
@@ -80,20 +80,21 @@ Run offline rules-only metrics on the held-out cases with:
 .\.venv\Scripts\python.exe eval\run.py --rules-only
 ```
 
-To compare all three variants, first set `OPENAI_API_KEY` locally in `.env`, then run:
+To compare all three variants, first configure `GEMINI_API_KEY` in `.env`, verify that the Gemini API project is on the free tier, and then run:
 
 ```powershell
-.\.venv\Scripts\python.exe eval\run.py --live-llm
+.\.venv\Scripts\python.exe eval\run.py --live-gemini
 ```
 
-The live command sends only the 24 held-out synthetic texts to OpenAI, makes one request per case, and reuses each response for LLM-only and hybrid scoring. This can incur provider charges. The default cost estimate uses the public `gpt-4o-mini` rates listed in [docs/RESULTS.md](./docs/RESULTS.md); for another model, pass both price-per-million options using its current rates. Each run writes its measured table to `docs/RESULTS.md`. No live LLM metrics are claimed until that command completes with a configured key.
+The live command sends only the fixed held-out synthetic texts to Gemini and reuses each response for Gemini-only and hybrid scoring. The dataset marks all 24 scam-style cases AI-written and none human-written; their original authoring transcript is not available in this checkout for independent verification. Results are cached in ignored `eval/.cache/` files; cached outcomes are reused on a rerun, including after a rate limit. A cached provider failure is also reused and is not automatically retried. Set `GEMINI_MIN_SECONDS_BETWEEN_CALLS` to control the minimum gap between outbound requests (default `12` seconds), and `GEMINI_MAX_CALLS_PER_RUN` to cap outbound HTTP attempts per evaluator process, including transient retries (default `40`). A 429 stops immediately with completed and remaining case counts; completed outcomes remain cached. Provider errors report the HTTP status, Google's status string, and a message truncated to 300 characters after removing API-key and request-content matches. Gemini free-tier inputs and outputs may be used by Google to improve its products and may be reviewed by humans. Never put real webpage text, personal information, or confidential material in the evaluation dataset. The evaluator writes measured results to `docs/RESULTS.md`; it does not claim unmeasured LLM results. Check the [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms) and [current pricing and tier](https://ai.google.dev/gemini-api/docs/pricing) before running. A billing-enabled project may incur charges; the code cannot determine or guarantee your account's tier.
 
 ## Privacy
 
 - No scan on page load. The extractor is injected only after **PROTECT ME**.
 - Visible text only (not CSS-hidden text, aria-labels, or alt text). This favors privacy over catching hidden content; see `docs/THREAT_MODEL.md`.
 - Page text is not stored or logged by Mamoru. Matched evidence and explanations are returned to the user in the response and popup.
-- After consent, only the first 12,000 characters of visible text are sent from the backend to OpenAI. The URL and title are excluded from that request. OpenAI's privacy and retention terms apply.
+- Real scan text is sent only to the local backend and is never sent to Gemini. Only synthetic cases from `eval/data/` are sent by the evaluation script.
+- Gemini free-tier evaluation prompts and responses may be used by Google to improve its products and may be reviewed by humans; see the linked provider terms before evaluation.
 - API keys must stay in `.env`, never in the extension except the local shared token. `.env` and `extension/config.js` are gitignored.
 
 ## License

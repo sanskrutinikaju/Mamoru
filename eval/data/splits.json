@@ -1,5 +1,5 @@
 {
-  "description": "Fixed evaluation split. Held-out IDs are evaluated only and never used for rule or prompt tuning.",
+  "description": "Fixed evaluation split. All cases are synthetic; held-out IDs are evaluated only and never used for rule or prompt tuning.",
   "held_out_ids": [
     "heldout-benign-01",
     "heldout-benign-02",
@@ -24,6 +24,30 @@
     "heldout-threat-09",
     "heldout-threat-10",
     "heldout-threat-11",
-    "heldout-threat-12"
+    "heldout-threat-12",
+    "handwritten-scam-credential-01",
+    "handwritten-scam-credential-02",
+    "handwritten-scam-credential-03",
+    "handwritten-scam-credential-04",
+    "handwritten-scam-credential-05",
+    "handwritten-scam-urgency-01",
+    "handwritten-scam-urgency-02",
+    "handwritten-scam-urgency-03",
+    "handwritten-scam-urgency-04",
+    "handwritten-scam-urgency-05",
+    "handwritten-scam-link-01",
+    "handwritten-scam-link-02",
+    "handwritten-scam-link-03",
+    "handwritten-scam-link-04",
+    "handwritten-scam-link-05",
+    "handwritten-scam-injection-01",
+    "handwritten-scam-injection-02",
+    "handwritten-scam-injection-03",
+    "handwritten-scam-injection-04",
+    "handwritten-scam-injection-05",
+    "handwritten-scam-benign-01",
+    "handwritten-scam-benign-02",
+    "handwritten-scam-benign-03",
+    "handwritten-scam-benign-04"
   ]
 }

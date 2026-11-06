@@ -4,11 +4,15 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
-from backend.config import MAX_LLM_CONTENT_CHARS, get_openai_api_key, get_openai_model
+from backend.config import MAX_LLM_CONTENT_CHARS
 from backend.rules.detector import Finding
 from backend.schemas.analysis import LLMAnalysis, LLMFinding
 
-from .provider import LLMProvider, LLMProviderError, OpenAIProvider
+from .provider import (
+    LLMInvalidResponseError,
+    LLMProvider,
+    LLMProviderError,
+)
 
 logger = logging.getLogger("mamoru.llm")
 
@@ -31,15 +35,8 @@ class LLMService:
 
     @classmethod
     def from_environment(cls) -> "LLMService":
-        api_key = get_openai_api_key()
-        if not api_key:
-            return cls(provider=None)
-        return cls(
-            provider=OpenAIProvider(
-                api_key=api_key,
-                model=get_openai_model(),
-            )
-        )
+        """Keep real browser page text local; Gemini is evaluation-only."""
+        return cls(provider=None)
 
     @staticmethod
     def _apply_rule_severity_floor(
@@ -69,8 +66,8 @@ class LLMService:
             return LLMServiceResult(
                 status="unavailable",
                 message=(
-                    "OpenAI is not configured. Deterministic rule findings only "
-                    "are returned."
+                    "Gemini is disabled for live page text. Only synthetic "
+                    "evaluation cases may be sent to Gemini."
                 ),
                 findings=[],
             )
@@ -79,11 +76,11 @@ class LLMService:
         try:
             analysis: LLMAnalysis = self.provider.analyze(minimized_text)
         except LLMProviderError:
-            logger.warning("LLM analysis failed; returning deterministic findings only.")
+            logger.warning("Gemini analysis failed; returning deterministic findings only.")
             return LLMServiceResult(
                 status="failed",
                 message=(
-                    "OpenAI analysis failed. Deterministic rule findings only "
+                    "Gemini analysis failed. Deterministic rule findings only "
                     "are returned."
                 ),
                 findings=[],
@@ -95,12 +92,12 @@ class LLMService:
                 analysis,
                 rule_findings,
             )
-        except LLMProviderError:
-            logger.warning("LLM analysis failed validation; returning deterministic findings only.")
+        except LLMInvalidResponseError:
+            logger.warning("Gemini analysis failed validation; returning deterministic findings only.")
             return LLMServiceResult(
                 status="failed",
                 message=(
-                    "OpenAI analysis failed validation. Deterministic rule "
+                    "Gemini analysis failed validation. Deterministic rule "
                     "findings only are returned."
                 ),
                 findings=[],
@@ -116,12 +113,12 @@ class LLMService:
         """Validate one provider result and optionally apply deterministic floors."""
         minimized_text = page_text[:MAX_LLM_CONTENT_CHARS]
         if any(finding.evidence not in minimized_text for finding in analysis.findings):
-            raise LLMProviderError(
-                "The OpenAI response included evidence not present in the input."
+            raise LLMInvalidResponseError(
+                "The Gemini response included evidence not present in the input."
             )
         return LLMServiceResult(
             status="completed",
-            message="OpenAI analysis completed; deterministic rule severity is the minimum.",
+            message="Gemini analysis completed; deterministic rule severity is the minimum.",
             findings=cls._apply_rule_severity_floor(
                 analysis.findings,
                 rule_findings,

@@ -26,6 +26,18 @@ def test_analyze_without_token_is_rejected():
     assert response.json()["detail"] == "Unauthorized."
 
 
+@pytest.mark.parametrize("server_token", ["", "   "])
+def test_analyze_fails_closed_when_server_token_is_empty(monkeypatch, server_token):
+    monkeypatch.setenv("MAMORU_API_TOKEN", server_token)
+
+    response = client.post("/analyze", json=VALID_BODY, headers=TOKEN_HEADER)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Mamoru API token is not configured on the server."
+    )
+
+
 def test_analyze_with_wrong_token_is_rejected():
     response = client.post(
         "/analyze",
@@ -44,7 +56,7 @@ def test_analyze_with_token_is_accepted():
     assert body["findings"] == []
     assert body["llmStatus"] == "unavailable"
     assert body["llmFindings"] == []
-    assert "not configured" in body["llmMessage"]
+    assert "disabled for live page text" in body["llmMessage"]
     assert body["safetyReport"]["overallLevel"] == "Cannot tell"
     assert body["safetyReport"]["findings"] == []
 

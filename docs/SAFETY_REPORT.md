@@ -1,8 +1,9 @@
 # Mamoru Safety Report
 
 The Safety Report summarizes text signals returned by Mamoru's deterministic
-rules and, when configured, its OpenAI analysis. It is a review aid, not proof
-that a page is harmful or safe.
+rules. The report schema can combine model findings for evaluation, but live
+page scans use local rules only. Mamoru never sends live page text to Gemini.
+The report is a review aid, not proof that a page is harmful or safe.
 
 ## Overall levels
 
@@ -34,8 +35,10 @@ not a probability or calibrated score:
 - **Low**: the finding came from the LLM only.
 
 These labels do not measure whether the page is actually malicious. A rule can
-match quoted or educational text, and the LLM can misinterpret context. The
-user should review the evidence and explanation.
+match quoted or educational text, and a model can misinterpret context. Current
+live scans use rules only, so their rule findings have Medium confidence. Gemini
+is used only with synthetic evaluation cases. The user should review the
+evidence and explanation.
 
 ## Synthetic level check
 

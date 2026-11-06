@@ -5,7 +5,7 @@ This is a simple description of what Mamoru tries to protect, who might attack i
 ## What we are trying to protect
 
 - The **user’s decision** to share page text: nothing is sent until they click **PROTECT ME** and then **Proceed**.
-- **Secrets on the backend**, such as the OpenAI API key. They stay in `.env` on the user’s machine, never in the extension.
+- **Secrets on the local machine**, such as the Gemini evaluation API key. They stay in `.env`, never in the extension.
 - The **local API** so a random website cannot easily use Mamoru as a hidden service.
 
 Webpage text is **untrusted data**. Mamoru must never treat that text as instructions.
@@ -74,19 +74,21 @@ The overall level is the strongest severity among the findings. With no
 findings, the result is **Cannot tell**; it never means the page is safe.
 Finding confidence is qualitative: High means a rule and the LLM agree on the
 category and exact evidence, Medium means a rule-only match, and Low means an
-LLM-only finding. These labels are not probabilities. See
+LLM-only finding. Live scans use rules only, so rule findings have Medium
+confidence; Gemini is evaluation-only. These labels are not probabilities. See
 `docs/SAFETY_REPORT.md` for the threshold definitions and the limits of the
 synthetic calibration check.
 
 ## LLM data flow and limits
 
 - The user must confirm before the local backend receives extracted page text.
-- If `OPENAI_API_KEY` is configured, Mamoru sends only the first 12,000 characters of visible page text to the single OpenAI provider. The URL, page title, consent timestamp, and word count are not included in that provider request.
-- The extension's confirmation screen states this external transfer before the user proceeds. OpenAI's privacy and retention terms apply to any text it receives; users should review the provider terms for their account before enabling the key.
-- The API key remains on the backend in `.env`; it is not sent to the extension.
-- Provider calls have a 15-second timeout and at most one retry. Invalid output, a timeout, network failure, provider error, or missing key leaves deterministic findings available and reports an explicit LLM status.
-- LLM output is validated against a strict Pydantic schema. Evidence must exactly occur in the minimized input, and a deterministic rule's severity is a floor that the LLM cannot lower.
-- Mamoru does not store or log page text. Text is sent to OpenAI only after consent and is subject to the provider's data-handling terms.
+- Real page text is processed by the local deterministic rules and is never sent to Gemini or another external model by the backend.
+- The evaluation script sends only labeled synthetic examples from `eval/data/` to Gemini after the user runs it. It rejects cases not marked synthetic.
+- Gemini API free-tier prompts and responses may be used by Google to improve its products and may be read, annotated, or processed by human reviewers. Do not send sensitive, confidential, personal, or real webpage data to that unpaid service. See the [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms).
+- The Gemini API key remains on the local machine in `.env`; only the evaluation script uses it.
+- Evaluation calls have a 15-second timeout, bounded retries for transient errors, and stop on rate limits so cached completed synthetic cases can be resumed later. Invalid model output and provider errors are counted separately.
+- Synthetic-evaluation LLM output is validated against a strict Pydantic schema. Evidence must exactly occur in the minimized input, and a deterministic rule's severity is a floor that the LLM cannot lower in hybrid scoring.
+- Mamoru does not store or log live page text. Synthetic evaluation text and structured model results may be cached under ignored `eval/.cache/` files to resume the evaluation.
 
 ## Honest limits
 

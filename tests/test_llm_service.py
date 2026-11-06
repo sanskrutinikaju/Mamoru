@@ -71,7 +71,18 @@ def test_service_returns_rules_only_when_provider_is_not_configured():
 
     assert result.status == "unavailable"
     assert result.findings == []
-    assert "not configured" in result.message
+    assert "Only synthetic evaluation cases" in result.message
+
+
+def test_service_never_enables_gemini_for_live_page_text(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "synthetic-test-key")
+
+    service = LLMService.from_environment()
+    result = service.analyze("Real page content stays local.", [])
+
+    assert service.provider is None
+    assert result.status == "unavailable"
+    assert "disabled for live page text" in result.message
 
 
 def test_service_returns_rules_only_after_provider_failure(caplog):
