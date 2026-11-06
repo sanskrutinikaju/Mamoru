@@ -1,9 +1,11 @@
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
+import eval.run as evaluation_run
 from backend.llm.provider import (
     LLMCallLimitError,
     LLMInvalidResponseError,
@@ -262,6 +264,45 @@ def test_failed_cache_entry_is_retried_once_per_run(tmp_path):
         assert retry_provider.calls == 1
         assert result.llm[0].status == "failed"
         assert len(cache.get(case)["previous_failures"]) == expected_failures
+
+
+def test_no_retry_failed_flag_reuses_cached_failure(tmp_path, monkeypatch):
+    cases = _held_out()[:1]
+    model = FakeProvider.model
+    cache_path = tmp_path / (
+        "gemini-" + hashlib.sha256(model.encode("utf-8")).hexdigest()[:12] + ".json"
+    )
+    seed_cache = EvaluationCache(cache_path, model, cases)
+    evaluate_gemini(
+        cases,
+        RuleEngine(),
+        FakeProvider(failure=LLMProviderError("Initial failure.")),
+        seed_cache,
+    )
+
+    provider = FakeProvider()
+    captured = {}
+    monkeypatch.setattr(sys, "argv", ["eval/run.py", "--live-gemini", "--no-retry-failed"])
+    monkeypatch.setattr(evaluation_run, "load_cases", lambda: cases)
+    monkeypatch.setattr(evaluation_run, "load_split", lambda loaded: ([], loaded))
+    monkeypatch.setattr(evaluation_run, "get_gemini_api_key", lambda: "mock-key")
+    monkeypatch.setattr(evaluation_run, "get_gemini_model", lambda: model)
+    monkeypatch.setattr(evaluation_run, "get_gemini_min_seconds_between_calls", lambda: 0)
+    monkeypatch.setattr(evaluation_run, "get_gemini_max_calls_per_run", lambda: 1)
+    monkeypatch.setattr(evaluation_run, "GeminiProvider", lambda *args, **kwargs: provider)
+    monkeypatch.setattr(evaluation_run, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(
+        evaluation_run,
+        "write_results",
+        lambda *args: captured.setdefault("live", args[3]),
+    )
+
+    evaluation_run.main()
+
+    assert provider.calls == 0
+    assert captured["live"].llm[0].status == "failed"
+    assert captured["live"].cache_hits == 1
+    assert captured["live"].cache_misses == 0
 
 
 def test_call_cap_stops_after_retry_uses_the_run_limit(tmp_path):
