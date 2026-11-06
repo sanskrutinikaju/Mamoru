@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -198,6 +199,52 @@ def test_gemini_results_are_cached_and_reused_without_page_text():
         assert second.cache_hits == len(cases)
         assert second.cache_misses == 0
         assert second.llm == first.llm
+
+
+def test_retry_failure_never_changes_or_re_requests_successful_cache_entries(tmp_path):
+    cases = _held_out()[:2]
+    failed_text = cases[1]["text"]
+
+    class SelectiveProvider(FakeProvider):
+        def __init__(self, failure_text=None):
+            super().__init__()
+            self.failure_text = failure_text
+            self.called_texts = []
+
+        def analyze(self, page_text):
+            self.calls += 1
+            self.called_texts.append(page_text)
+            self.last_attempt_count = 1
+            if page_text == self.failure_text:
+                raise LLMProviderError("Synthetic provider failure.")
+            self.last_usage = TokenUsage(100, 10, 2)
+            return self.result
+
+    def successful_entries_hash(cache):
+        entries = sorted(
+            (digest, entry)
+            for digest, entry in cache.entries.items()
+            if entry["status"] == "completed"
+        )
+        serialized = json.dumps(entries, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    cache_path = tmp_path / "gemini-cache.json"
+    initial_provider = SelectiveProvider(failure_text=failed_text)
+    initial_cache = EvaluationCache(cache_path, initial_provider.model, cases)
+    evaluate_gemini(cases, RuleEngine(), initial_provider, initial_cache)
+
+    resumed_cache = EvaluationCache(cache_path, initial_provider.model, cases)
+    successful_hash_before = successful_entries_hash(resumed_cache)
+    retry_provider = SelectiveProvider(failure_text=failed_text)
+    result = evaluate_gemini(cases, RuleEngine(), retry_provider, resumed_cache)
+
+    assert retry_provider.calls == 1
+    assert retry_provider.called_texts == [failed_text]
+    assert result.llm[0].status == "completed"
+    assert result.llm[1].status == "failed"
+    assert len(resumed_cache.get(cases[1])["previous_failures"]) == 1
+    assert successful_entries_hash(resumed_cache) == successful_hash_before
 
 
 def test_rate_limit_stops_immediately_and_rerun_uses_completed_cache(tmp_path):
