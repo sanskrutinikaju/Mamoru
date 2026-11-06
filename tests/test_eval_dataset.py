@@ -247,6 +247,77 @@ def test_retry_failure_never_changes_or_re_requests_successful_cache_entries(tmp
     assert successful_entries_hash(resumed_cache) == successful_hash_before
 
 
+def test_failed_cache_entry_is_retried_once_per_run(tmp_path):
+    case = _held_out()[0]
+    cache = EvaluationCache(tmp_path / "gemini-cache.json", FakeProvider.model, [case])
+    _seed_provider = FakeProvider(failure=LLMProviderError("Initial failure."))
+    evaluate_gemini([case], RuleEngine(), _seed_provider, cache)
+
+    for expected_failures in (1, 2):
+        retry_provider = FakeProvider(
+            failure=LLMProviderError("Retry failure.")
+        )
+        result = evaluate_gemini([case], RuleEngine(), retry_provider, cache)
+
+        assert retry_provider.calls == 1
+        assert result.llm[0].status == "failed"
+        assert len(cache.get(case)["previous_failures"]) == expected_failures
+
+
+def test_call_cap_stops_after_retry_uses_the_run_limit(tmp_path):
+    cases = _held_out()[:3]
+    cache = EvaluationCache(
+        tmp_path / "gemini-cache.json", FakeProvider.model, cases
+    )
+    seed_provider = FakeProvider(failure=LLMProviderError("Initial failure."))
+    evaluate_gemini(cases[:2], RuleEngine(), seed_provider, cache)
+
+    class OneCallRetryProvider(FakeProvider):
+        def analyze(self, page_text):
+            assert page_text
+            if self.calls == 1:
+                raise LLMCallLimitError("Gemini per-run call limit reached.")
+            self.calls += 1
+            self.last_attempt_count = 1
+            raise LLMProviderError("Retry failed.")
+
+    retry_provider = OneCallRetryProvider()
+    with pytest.raises(EvaluationPaused) as paused:
+        evaluate_gemini(cases, RuleEngine(), retry_provider, cache)
+
+    assert retry_provider.calls == 1
+    assert paused.value.completed == 1
+    assert paused.value.remaining == 2
+    assert "per-run call cap" in str(paused.value)
+
+
+def test_rate_limit_during_retry_stops_with_remaining_count(tmp_path):
+    cases = _held_out()[:3]
+    cache = EvaluationCache(
+        tmp_path / "gemini-cache.json", FakeProvider.model, cases
+    )
+    evaluate_gemini(cases[:1], RuleEngine(), FakeProvider(), cache)
+    seed_provider = FakeProvider(failure=LLMProviderError("Initial failure."))
+    evaluate_gemini(cases[1:2], RuleEngine(), seed_provider, cache)
+
+    class RateLimitOnRetryProvider(FakeProvider):
+        def analyze(self, page_text):
+            assert page_text == cases[1]["text"]
+            self.calls += 1
+            self.last_attempt_count = 1
+            raise LLMRateLimitError("Synthetic rate limit.")
+
+    retry_provider = RateLimitOnRetryProvider()
+    with pytest.raises(EvaluationPaused) as paused:
+        evaluate_gemini(cases, RuleEngine(), retry_provider, cache)
+
+    assert retry_provider.calls == 1
+    assert paused.value.completed == 1
+    assert paused.value.remaining == 2
+    assert "1 cases completed; 2 remain" in str(paused.value)
+    assert cache.rate_limit_events[cases[1]["id"]] == 1
+
+
 def test_rate_limit_stops_immediately_and_rerun_uses_completed_cache(tmp_path):
     cases = _held_out()[:3]
 
