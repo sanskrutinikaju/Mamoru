@@ -833,6 +833,7 @@ def write_results(
     rules: list[VariantResult],
     live: LiveResults | None,
     model: str | None,
+    cache: EvaluationCache | None = None,
 ) -> None:
     """Write all numbers from this evaluator run, labeling every model result."""
     variants = _variant_records(live, rules, model)
@@ -883,6 +884,20 @@ def write_results(
         if model and live is not None
         else f"{PROVIDER_NAME} / not run; configure GEMINI_MODEL"
     )
+    retry_entries = [
+        entry
+        for entry in (cache.entries.values() if cache is not None else [])
+        if entry.get("previous_failures")
+    ]
+    failed_cases_retried = sum(
+        len(entry["previous_failures"]) for entry in retry_entries
+    )
+    retries_succeeded = sum(entry["status"] == "completed" for entry in retry_entries)
+    retries_failed_again = sum(
+        max(0, len(entry["previous_failures"]) - 1)
+        + (entry["status"] == "failed")
+        for entry in retry_entries
+    )
     cache_line = (
         f"- Cache hits: {live.cache_hits}; cache misses: {live.cache_misses}; "
         f"API attempts: {live.api_attempts}; rate-limit responses: "
@@ -890,6 +905,10 @@ def write_results(
         "synthetic-derived findings, token counts, and timings."
         if live is not None
         else "- Gemini cache was not used in this rules-only run."
+    )
+    retry_line = (
+        f"- Failed cases retried: {failed_cases_retried}; retries that succeeded: "
+        f"{retries_succeeded}; retries that failed again: {retries_failed_again}."
     )
 
     content = f"""# Mamoru Evaluation Results
@@ -938,6 +957,7 @@ Correctness here means the case label is `threat`; this is not probability calib
 {_token_summary(llm_results, model)}
 {_provider_quality(live, model, total_cases)}
 {cache_line}
+{retry_line}
 - Request timeout: 15 seconds. Transient network/server errors receive at most one retry. Request spacing and the per-run HTTP call cap are configurable with `GEMINI_MIN_SECONDS_BETWEEN_CALLS` (default 12) and `GEMINI_MAX_CALLS_PER_RUN` (default 40). A 429 stops immediately with completed/remaining counts; cached outcomes are reused on rerun.
 - Billing cost is not estimated: free-tier eligibility and account billing status cannot be verified by this script. Verify the active project and tier in Google AI Studio before running. A billing-enabled project may incur charges.
 
@@ -980,6 +1000,7 @@ def main() -> None:
     rules = evaluate_rules(held_out_cases, engine)
     live = None
     model = None
+    cache = None
 
     if args.live_gemini:
         api_key = get_gemini_api_key()
@@ -1023,7 +1044,7 @@ def main() -> None:
             )
             raise SystemExit(2) from None
 
-    write_results(train_cases, held_out_cases, rules, live, model)
+    write_results(train_cases, held_out_cases, rules, live, model, cache)
     print(
         f"Cases: {len(cases)} synthetic "
         f"({len(train_cases)} training; {len(held_out_cases)} held out)"
