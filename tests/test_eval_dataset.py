@@ -166,6 +166,7 @@ def test_result_tables_have_matching_columns_when_live_results_are_pending():
     assert len(row_without_live.strip("|").split("|")) == 12
     assert len(row_with_results.strip("|").split("|")) == 12
     assert all(len(row.strip("|").split("|")) == 12 for row in category_rows)
+    assert any(row.startswith("| AI-written scam-style |") for row in category_rows)
 
 
 def test_gemini_results_are_cached_and_reused_without_page_text():

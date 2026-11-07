@@ -171,10 +171,10 @@ def load_cases(path: Path = CASES_PATH) -> list[dict[str, Any]]:
         if case["group"] == "handwritten_scam_style" and not case["id"].startswith(
             "handwritten-scam-"
         ):
-            raise ValueError(f"Invalid hand-written case ID on line {line_number}.")
+            raise ValueError(f"Invalid AI-written scam-style case ID on line {line_number}.")
         if case["group"] == "handwritten_scam_style" and case.get("authorship") != "AI-written":
             raise ValueError(
-                f"Hand-written scam-style cases must identify their author on line {line_number}."
+                f"AI-written scam-style cases must declare AI-written authorship on line {line_number}."
             )
         if case["group"] == "core" and case["id"].startswith("handwritten-scam-"):
             raise ValueError(f"Invalid core case ID on line {line_number}.")
@@ -185,7 +185,7 @@ def load_cases(path: Path = CASES_PATH) -> list[dict[str, Any]]:
     if not cases:
         raise ValueError("The evaluation dataset contains no cases.")
     if not any(case["group"] == "handwritten_scam_style" for case in cases):
-        raise ValueError("The hand-written synthetic group is missing.")
+        raise ValueError("The AI-written scam-style group is missing.")
     return cases
 
 
@@ -793,6 +793,9 @@ def _category_rows(
 ) -> list[str]:
     rows: list[str] = []
     for group in ("core", "handwritten_scam_style"):
+        group_label = (
+            "AI-written scam-style" if group == "handwritten_scam_style" else group
+        )
         for category in sorted(CASE_CATEGORIES):
             selected = [
                 index
@@ -811,13 +814,13 @@ def _category_rows(
                 metrics = _variant_metrics(selected_cases, selected_results)
                 if metrics is None:
                     rows.append(
-                        f"| {group} | {category} | {name} | {provider_label} | "
+                        f"| {group_label} | {category} | {name} | {provider_label} | "
                         f"{len(selected_cases)} | Not run | Not run | Not run | Not run | "
                         "Not run | Not run | Not run |"
                     )
                     continue
                 rows.append(
-                    f"| {group} | {category} | {name} | {provider_label} | "
+                    f"| {group_label} | {category} | {name} | {provider_label} | "
                     f"{metrics.total} | {metrics.true_positive} | {metrics.false_positive} | "
                     f"{metrics.true_negative} | {metrics.false_negative} | "
                     f"{_percentage(metrics.true_positive, metrics.true_positive + metrics.false_negative)} | "
@@ -919,15 +922,15 @@ Mode: {"rules-only" if live is None else "live Gemini comparison"}
 
 Dataset: {len(train_cases) + len(held_out_cases)} explicitly synthetic cases; {len(train_cases)} training; {total_cases} fixed held-out.
 
-Held-out groups: core {group_counts["core"]}; hand-written scam-style {group_counts["handwritten_scam_style"]}.
+Held-out groups: core {group_counts["core"]}; AI-written scam-style {group_counts["handwritten_scam_style"]}.
 
 LLM provider/model: {llm_provider_model}
 
-No real webpage text or user scans are in this evaluation dataset. The hand-written group was authored for this project and uses fictional `.test` domains.
+No real webpage text or user scans are in this evaluation dataset. Dataset metadata labels the scam-style examples AI-written; they use fictional `.test` domains.
 
 ## Dataset provenance and evaluation-history limitations
 
-- The dataset marks all 24 scam-style cases **AI-written** and none **human-written**. The authoring-session transcript is unavailable in this checkout, so the recorded attribution could not be independently audited here.
+- Dataset metadata labels all 24 scam-style cases **AI-written**.
 - The original 24 core held-out IDs remain held out. The 24 AI-written scam-style cases were added to the held-out group; none of the original held-out cases moved into training.
 - No deterministic rules were changed after the first held-out rules results were shown. The system prompt wording was kept, but the provider-specific request envelope and structured-output schema were adapted from OpenAI Chat Completions to Gemini GenerateContent. Therefore comparisons to earlier OpenAI-era measurements are not like-for-like; the first results must not be used as if they were Gemini results.
 - The live report uses 48 held-out cases, so the first 24-case metrics and current 48-case metrics have different sample composition.
@@ -965,7 +968,8 @@ Correctness here means the case label is `threat`; this is not probability calib
 
 - The fixed held-out IDs are in `eval/data/splits.json`; the evaluator never uses them to tune rules or prompts.
 - A positive prediction means at least one finding was returned. No finding is counted as an abstention and as a negative prediction. Confusion counts and percentages use only the held-out cases.
-- The hand-written scam-style group is reported separately from the core examples. It contains synthetic examples, not copied messages or real brands.
+- The AI-written scam-style group is reported separately from the core examples. It contains synthetic examples, not copied messages or real brands.
+- Near-perfect Gemini scores on AI-written synthetic data likely reflect easy, stylistically recognizable cases and should not be generalized beyond this dataset. Here, "abstain" means no findings were returned; it is not a "cannot tell" outcome.
 - Latencies are measured on this machine and are not benchmarks. Cached Gemini calls retain the original measured latency and token usage.
 - Gemini free-tier inputs and outputs may be used by Google to improve its products and may be reviewed by humans. Only synthetic cases are sent. See the [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms).
 - {comparison}

@@ -6,15 +6,15 @@ Mode: live Gemini comparison
 
 Dataset: 144 explicitly synthetic cases; 96 training; 48 fixed held-out.
 
-Held-out groups: core 24; hand-written scam-style 24.
+Held-out groups: core 24; AI-written scam-style 24.
 
 LLM provider/model: Google Gemini Developer API / gemini-3.5-flash-lite
 
-No real webpage text or user scans are in this evaluation dataset. The hand-written group was authored for this project and uses fictional `.test` domains.
+No real webpage text or user scans are in this evaluation dataset. Dataset metadata labels the scam-style examples AI-written; they use fictional `.test` domains.
 
 ## Dataset provenance and evaluation-history limitations
 
-- The dataset marks all 24 scam-style cases **AI-written** and none **human-written**. The authoring-session transcript is unavailable in this checkout, so the recorded attribution could not be independently audited here.
+- Dataset metadata labels all 24 scam-style cases **AI-written**.
 - The original 24 core held-out IDs remain held out. The 24 AI-written scam-style cases were added to the held-out group; none of the original held-out cases moved into training.
 - No deterministic rules were changed after the first held-out rules results were shown. The system prompt wording was kept, but the provider-specific request envelope and structured-output schema were adapted from OpenAI Chat Completions to Gemini GenerateContent. Therefore comparisons to earlier OpenAI-era measurements are not like-for-like; the first results must not be used as if they were Gemini results.
 - The live report uses 48 held-out cases, so the first 24-case metrics and current 48-case metrics have different sample composition.
@@ -46,21 +46,21 @@ No real webpage text or user scans are in this evaluation dataset. The hand-writ
 | core | urgency_pressure | Rules only | Mamoru rules | 3 | 1 | 0 | 0 | 2 | 1/3 (33.3%) | n/a | 2/3 (66.7%) |
 | core | urgency_pressure | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 3 | 3 | 0 | 0 | 0 | 3/3 (100.0%) | n/a | 0/3 (0.0%) |
 | core | urgency_pressure | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 3 | 3 | 0 | 0 | 0 | 3/3 (100.0%) | n/a | 0/3 (0.0%) |
-| handwritten_scam_style | credential_request | Rules only | Mamoru rules | 5 | 1 | 0 | 0 | 4 | 1/5 (20.0%) | n/a | 4/5 (80.0%) |
-| handwritten_scam_style | credential_request | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
-| handwritten_scam_style | credential_request | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
-| handwritten_scam_style | deceptive_link | Rules only | Mamoru rules | 5 | 0 | 0 | 0 | 5 | 0/5 (0.0%) | n/a | 5/5 (100.0%) |
-| handwritten_scam_style | deceptive_link | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
-| handwritten_scam_style | deceptive_link | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
-| handwritten_scam_style | none | Rules only | Mamoru rules | 4 | 0 | 1 | 3 | 0 | n/a | 1/4 (25.0%) | 3/4 (75.0%) |
-| handwritten_scam_style | none | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 4 | 0 | 1 | 3 | 0 | n/a | 1/4 (25.0%) | 3/4 (75.0%) |
-| handwritten_scam_style | none | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 4 | 0 | 2 | 2 | 0 | n/a | 2/4 (50.0%) | 2/4 (50.0%) |
-| handwritten_scam_style | prompt_injection | Rules only | Mamoru rules | 5 | 2 | 0 | 0 | 3 | 2/5 (40.0%) | n/a | 3/5 (60.0%) |
-| handwritten_scam_style | prompt_injection | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
-| handwritten_scam_style | prompt_injection | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
-| handwritten_scam_style | urgency_pressure | Rules only | Mamoru rules | 5 | 2 | 0 | 0 | 3 | 2/5 (40.0%) | n/a | 3/5 (60.0%) |
-| handwritten_scam_style | urgency_pressure | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
-| handwritten_scam_style | urgency_pressure | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
+| AI-written scam-style | credential_request | Rules only | Mamoru rules | 5 | 1 | 0 | 0 | 4 | 1/5 (20.0%) | n/a | 4/5 (80.0%) |
+| AI-written scam-style | credential_request | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
+| AI-written scam-style | credential_request | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
+| AI-written scam-style | deceptive_link | Rules only | Mamoru rules | 5 | 0 | 0 | 0 | 5 | 0/5 (0.0%) | n/a | 5/5 (100.0%) |
+| AI-written scam-style | deceptive_link | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
+| AI-written scam-style | deceptive_link | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
+| AI-written scam-style | none | Rules only | Mamoru rules | 4 | 0 | 1 | 3 | 0 | n/a | 1/4 (25.0%) | 3/4 (75.0%) |
+| AI-written scam-style | none | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 4 | 0 | 1 | 3 | 0 | n/a | 1/4 (25.0%) | 3/4 (75.0%) |
+| AI-written scam-style | none | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 4 | 0 | 2 | 2 | 0 | n/a | 2/4 (50.0%) | 2/4 (50.0%) |
+| AI-written scam-style | prompt_injection | Rules only | Mamoru rules | 5 | 2 | 0 | 0 | 3 | 2/5 (40.0%) | n/a | 3/5 (60.0%) |
+| AI-written scam-style | prompt_injection | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
+| AI-written scam-style | prompt_injection | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
+| AI-written scam-style | urgency_pressure | Rules only | Mamoru rules | 5 | 2 | 0 | 0 | 3 | 2/5 (40.0%) | n/a | 3/5 (60.0%) |
+| AI-written scam-style | urgency_pressure | Gemini only | Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
+| AI-written scam-style | urgency_pressure | Hybrid | Mamoru rules + Google Gemini Developer API / gemini-3.5-flash-lite | 5 | 5 | 0 | 0 | 0 | 5/5 (100.0%) | n/a | 0/5 (0.0%) |
 
 ## Calibration check: High versus Medium
 
@@ -85,7 +85,8 @@ Correctness here means the case label is `threat`; this is not probability calib
 
 - The fixed held-out IDs are in `eval/data/splits.json`; the evaluator never uses them to tune rules or prompts.
 - A positive prediction means at least one finding was returned. No finding is counted as an abstention and as a negative prediction. Confusion counts and percentages use only the held-out cases.
-- The hand-written scam-style group is reported separately from the core examples. It contains synthetic examples, not copied messages or real brands.
+- The AI-written scam-style group is reported separately from the core examples. It contains synthetic examples, not copied messages or real brands.
+- Near-perfect Gemini scores on AI-written synthetic data likely reflect easy, stylistically recognizable cases and should not be generalized beyond this dataset. Here, "abstain" means no findings were returned; it is not a "cannot tell" outcome.
 - Latencies are measured on this machine and are not benchmarks. Cached Gemini calls retain the original measured latency and token usage.
 - Gemini free-tier inputs and outputs may be used by Google to improve its products and may be reviewed by humans. Only synthetic cases are sent. See the [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms).
 - Hybrid is not better than the best single variant on F1 (0.928 vs 0.970).

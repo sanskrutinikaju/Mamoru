@@ -51,6 +51,7 @@ comparison. The script also says whether High was correct more often than
 Medium on that dataset.
 
 This is a small sanity check, not statistical calibration, a held-out test, or
-a claim about real websites. The current case set is hand-written and too
-small to establish reliable real-world performance. Report only numbers
-reproduced by the script, and do not tune rules against a future held-out set.
+a claim about real websites. The dataset includes 24 AI-written scam-style
+cases and is too small to establish reliable real-world performance. Report
+only numbers reproduced by the script, and do not tune rules against a future
+held-out set.
