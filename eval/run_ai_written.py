@@ -1,16 +1,40 @@
 """Write a rules-only report for the separate AI-written case group."""
 
+import hashlib
+import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.rules import RuleEngine
-from eval.run import calculate_metrics, evaluate_rules, load_ai_written_cases
+from eval.run import CACHE_DIR, calculate_metrics, evaluate_rules, load_ai_written_cases
 
 RESULTS_AI_WRITTEN_PATH = PROJECT_ROOT / "docs" / "RESULTS_AI_WRITTEN.md"
+
+
+def _live_cache_path(model: str) -> Path:
+    model_hash = hashlib.sha256(model.encode("utf-8")).hexdigest()[:12]
+    return CACHE_DIR / f"gemini-ai-written-claude-{model_hash}.json"
+
+
+def _backup_existing_cache(path: Path) -> Path | None:
+    if not path.exists():
+        return None
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    suffix = 0
+    while True:
+        extra = f"-{suffix}" if suffix else ""
+        backup = path.with_name(f"{path.stem}.backup-{timestamp}{extra}{path.suffix}")
+        try:
+            with path.open("rb") as source, backup.open("xb") as destination:
+                shutil.copyfileobj(source, destination)
+            return backup
+        except FileExistsError:
+            suffix += 1
 
 
 def _commit_hash() -> str:
