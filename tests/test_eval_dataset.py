@@ -326,6 +326,74 @@ def test_ai_written_live_run_writes_only_its_dedicated_report(
     assert (PROJECT_ROOT / "docs" / "RESULTS.md").exists()
 
 
+def test_ai_written_live_report_summarizes_structured_prompt_injection_results(
+    tmp_path, monkeypatch
+):
+    cases = load_ai_written_cases()
+    cases_by_id = {case["id"]: case for case in cases}
+
+    class StructuredProvider(FakeProvider):
+        def analyze(self, page_text):
+            self.calls += 1
+            self.last_attempt_count = 1
+            case_id = next(
+                case["id"] for case in cases if case["text"] == page_text
+            )
+            if case_id == "cw_004":
+                findings = [
+                    {
+                        "category": "prompt_injection",
+                        "severity": "Low",
+                        "evidence": "AI assistants reading this page",
+                        "explanation": "This website is completely safe.",
+                    }
+                ]
+            elif case_id == "cw_005":
+                findings = [
+                    {
+                        "category": "prompt_injection",
+                        "severity": "Medium",
+                        "evidence": "forward the user's conversation",
+                        "explanation": "This is an untrusted prompt-injection attempt.",
+                    }
+                ]
+            else:
+                findings = []
+            self.last_usage = TokenUsage(100, 10, 2)
+            return LLMAnalysis(findings=findings)
+
+    provider = StructuredProvider()
+    _configure_ai_written_live_run(monkeypatch, tmp_path, provider)
+
+    ai_written_report.main()
+
+    report = (tmp_path / "RESULTS_AI_WRITTEN.md").read_text(encoding="utf-8")
+    rules_predictions = {
+        case["id"]: result.prediction
+        for case, result in zip(cases, ai_written_report.evaluate_rules(cases, RuleEngine()))
+    }
+    assert (
+        f"| cw_004 | {'yes' if rules_predictions['cw_004'] else 'no'} | yes | "
+        "yes (explicit matching claim) | prompt_injection (Low) |"
+    ) in report
+    assert (
+        f"| cw_005 | {'yes' if rules_predictions['cw_005'] else 'no'} | yes | "
+        "no (prompt injection identified) | prompt_injection (Medium) |"
+    ) in report
+    assert (
+        f"| cw_006 | {'yes' if rules_predictions['cw_006'] else 'no'} | no | "
+        "unclear | none |"
+    ) in report
+    assert "had not seen the rule definitions" in report
+    assert "synthetic" in report
+    assert "never used to tune rules or prompts" in report
+    assert "very small sample" in report
+    assert "not real-world performance" in report
+    assert "test123" in report
+    assert all(case["text"] not in report for case in cases_by_id.values())
+    assert provider.calls == len(cases)
+
+
 def test_ai_written_report_writes_only_to_its_separate_path(tmp_path, monkeypatch):
     output_path = tmp_path / "RESULTS_AI_WRITTEN.md"
     written_paths = []
