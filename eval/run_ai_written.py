@@ -68,17 +68,26 @@ def _dimension_rows(cases: list[dict], results: list, dimension: str) -> str:
 
 
 def main() -> None:
+
+    import argparse
+    parser = argparse.ArgumentParser(description="Evaluate AI-written Claude group.")
+    parser.add_argument("--live-gemini", action="store_true", help="Evaluate with Gemini (synthetic-only, isolated cache, no live calls in tests)")
+    parser.add_argument("--no-retry-failed", action="store_true", help="Do not retry failed Gemini entries")
+    args = parser.parse_args()
+
     cases = load_ai_written_cases()
-    results = evaluate_rules(cases, RuleEngine())
-    metrics = calculate_metrics(
-        cases,
-        [result.prediction for result in results],
-        [result.latency_seconds for result in results],
-    )
-    commit_hash = _commit_hash()
-    missed_ids = [case["id"] for case, result in zip(cases, results) if case["label"] == "threat" and not result.prediction]
-    false_positive_ids = [case["id"] for case, result in zip(cases, results) if case["label"] == "benign" and result.prediction]
-    content = f"""# AI-written Claude Dataset Rules-Only Results
+    rules_results = evaluate_rules(cases, RuleEngine())
+
+    if not args.live_gemini:
+        metrics = calculate_metrics(
+            cases,
+            [result.prediction for result in rules_results],
+            [result.latency_seconds for result in rules_results],
+        )
+        commit_hash = _commit_hash()
+        missed_ids = [case["id"] for case, result in zip(cases, rules_results) if case["label"] == "threat" and not result.prediction]
+        false_positive_ids = [case["id"] for case, result in zip(cases, rules_results) if case["label"] == "benign" and result.prediction]
+        content = f"""# AI-written Claude Dataset Rules-Only Results
 
 Rules were unchanged when these numbers were produced. Git revision: `{commit_hash}`.
 
@@ -96,19 +105,133 @@ Counts and percentages are out of {metrics.total} cases.
 
 | Category | Cases | TP | FP | TN | FN | No findings |
 |---|---:|---:|---:|---:|---:|---:|
-{_dimension_rows(cases, results, "category")}
+{_dimension_rows(cases, rules_results, "category")}
 
 ## By language
 
 | Language | Cases | TP | FP | TN | FN | No findings |
 |---|---:|---:|---:|---:|---:|---:|
-{_dimension_rows(cases, results, "language")}
+{_dimension_rows(cases, rules_results, "language")}
 
 ## Case IDs
 
 - Missed malicious cases: {", ".join(missed_ids) or "None"}
 - Benign cases wrongly flagged: {", ".join(false_positive_ids) or "None"}
 """
+        RESULTS_AI_WRITTEN_PATH.write_text(content, encoding="utf-8")
+        return
+
+    # --- Gemini evaluation path ---
+    from backend.config import (
+        get_gemini_api_key,
+        get_gemini_max_calls_per_run,
+        get_gemini_min_seconds_between_calls,
+        get_gemini_model,
+    )
+    from backend.llm.provider import GeminiProvider
+    from eval.run import EvaluationCache, evaluate_gemini, EvaluationPaused
+    from backend.reporting import build_safety_report
+
+    model = get_gemini_model()
+    api_key = get_gemini_api_key()
+    min_delay = get_gemini_min_seconds_between_calls()
+    call_cap = get_gemini_max_calls_per_run()
+    cache_path = _live_cache_path(model)
+
+    # Backup cache before first request
+    _backup_existing_cache(cache_path)
+
+    cache = EvaluationCache(cache_path, model, cases)
+    provider = GeminiProvider(
+        api_key,
+        model,
+        min_seconds_between_calls=min_delay,
+        max_calls=call_cap,
+    )
+
+    # Hash of successful entries before
+    import json
+    def successful_entries_hash(cache):
+        entries = sorted(
+            (digest, entry)
+            for digest, entry in cache.entries.items()
+            if entry["status"] == "completed"
+        )
+        serialized = json.dumps(entries, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    hash_before = successful_entries_hash(cache)
+
+    try:
+        live = evaluate_gemini(
+            cases,
+            RuleEngine(),
+            provider,
+            cache,
+            retry_failed=not args.no_retry_failed,
+        )
+    except EvaluationPaused as e:
+        print(f"Stopped after {e.completed} of {e.total} cases: {e}")
+        live = None
+
+    hash_after = successful_entries_hash(cache)
+
+    # Write report (Gemini only, hybrid, rules)
+    commit_hash = _commit_hash()
+    def _variant_metrics(cases, results):
+        from eval.run import calculate_metrics
+        if results is None:
+            return None
+        return calculate_metrics(
+            cases,
+            [result.prediction for result in results],
+            [result.latency_seconds for result in results],
+        )
+
+    def _variant_row(name, results):
+        metrics = _variant_metrics(cases, results)
+        if metrics is None:
+            return f"| {name} | Not run | Not run | Not run | Not run | Not run | Not run | Not run | Not run | Not run | Not run | Not run |"
+        return (
+            f"| {name} | {metrics.total} | {metrics.true_positive} | {metrics.false_positive} | {metrics.true_negative} | {metrics.false_negative} | "
+            f"{metrics.true_positive / metrics.total:.1%} | {metrics.false_positive / metrics.total:.1%} | {metrics.true_negative / metrics.total:.1%} | "
+            f"{metrics.false_negative / metrics.total:.1%} | {metrics.abstentions / metrics.total:.1%} | {metrics.mean_latency_ms:.2f} ms |"
+        )
+
+    content = f"""# AI-written Claude Dataset Gemini Results
+
+Rules and Gemini model: `{model}`. Git revision: `{commit_hash}`.
+
+The 20 cases were written by an AI model that had not seen the rule definitions. They are not human-written, are synthetic, and were never used to tune rules.
+
+## Hash of successful Gemini entries before: `{hash_before}`
+## Hash of successful Gemini entries after: `{hash_after}`
+
+## Overall
+
+| Variant | Cases | TP | FP | TN | FN | TP % | FP % | TN % | FN % | Abstain % | Mean latency |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+{_variant_row('Rules only', rules_results)}
+{_variant_row('Gemini only', live.llm if live else None)}
+{_variant_row('Hybrid', live.hybrid if live else None)}
+
+## Prompt-injection findings (Gemini only)
+"""
+    # List prompt-injection findings
+    if live and live.llm:
+        from backend.schemas.analysis import LLMAnalysis
+        pi_cases = [
+            (case["id"], result)
+            for case, result in zip(cases, live.llm)
+            if any(f.category == "prompt_injection" for f in LLMAnalysis.model_validate({"findings": getattr(result, "findings", [])}).findings)
+        ]
+        if pi_cases:
+            content += "\n".join(f"- {cid}" for cid, _ in pi_cases)
+        else:
+            content += "None found."
+    else:
+        content += "Not run."
+
     RESULTS_AI_WRITTEN_PATH.write_text(content, encoding="utf-8")
 
 

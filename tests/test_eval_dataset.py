@@ -21,6 +21,7 @@ from eval.run import (
     EvaluationPaused,
     VariantResult,
     _category_rows,
+    _case_digest,
     _format_variant_row,
     evaluate_gemini,
     load_ai_written_cases,
@@ -130,6 +131,201 @@ def test_ai_written_dataset_normalizes_and_validates_every_line(tmp_path):
         load_ai_written_cases(path)
 
 
+def test_ai_written_cache_keys_do_not_collide_with_existing_evaluation_cases():
+    model = FakeProvider.model
+    ai_written_keys = {
+        _case_digest(case, model) for case in load_ai_written_cases()
+    }
+    existing_keys = {_case_digest(case, model) for case in _cases()}
+
+    assert len(ai_written_keys) == 20
+    assert ai_written_keys.isdisjoint(existing_keys)
+
+
+def _configure_ai_written_live_run(monkeypatch, tmp_path, provider):
+    from backend import config
+    from backend.llm import provider as provider_module
+
+    monkeypatch.setattr(sys, "argv", ["eval/run_ai_written.py", "--live-gemini", "--no-retry-failed"])
+    monkeypatch.setattr(ai_written_report, "CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(ai_written_report, "RESULTS_AI_WRITTEN_PATH", tmp_path / "RESULTS_AI_WRITTEN.md")
+    monkeypatch.setattr(ai_written_report, "_commit_hash", lambda: "test123")
+    monkeypatch.setattr(config, "get_gemini_api_key", lambda: "mock-key")
+    monkeypatch.setattr(config, "get_gemini_model", lambda: provider.model)
+    monkeypatch.setattr(config, "get_gemini_min_seconds_between_calls", lambda: 0)
+    monkeypatch.setattr(config, "get_gemini_max_calls_per_run", lambda: 40)
+    monkeypatch.setattr(provider_module, "GeminiProvider", lambda *args, **kwargs: provider)
+
+
+def test_ai_written_live_run_preserves_hash_of_existing_successful_and_failed_entries(
+    tmp_path, monkeypatch
+):
+    cases = load_ai_written_cases()
+    cache_path = tmp_path / "cache" / f"gemini-ai-written-claude-{hashlib.sha256(FakeProvider.model.encode()).hexdigest()[:12]}.json"
+
+    class SeedProvider(FakeProvider):
+        def analyze(self, page_text):
+            self.calls += 1
+            self.last_attempt_count = 1
+            if page_text == cases[1]["text"]:
+                raise LLMProviderError("Synthetic cached failure.")
+            self.last_usage = TokenUsage(100, 10, 2)
+            return self.result
+
+    seeded_cache = EvaluationCache(cache_path, FakeProvider.model, cases)
+    evaluate_gemini(cases[:2], RuleEngine(), SeedProvider(), seeded_cache)
+    original_digests = set(seeded_cache.entries)
+
+    def entries_hash(entries):
+        serialized = json.dumps(
+            sorted((digest, entries[digest]) for digest in original_digests),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    before_hash = entries_hash(seeded_cache.entries)
+    provider = FakeProvider()
+    _configure_ai_written_live_run(monkeypatch, tmp_path, provider)
+
+    ai_written_report.main()
+
+    after_cache = EvaluationCache(cache_path, FakeProvider.model, cases)
+    assert {entry["status"] for entry in seeded_cache.entries.values()} == {"completed", "failed"}
+    assert entries_hash(after_cache.entries) == before_hash
+    assert provider.calls == len(cases) - len(original_digests)
+
+
+def test_ai_written_live_run_backs_up_cache_before_request_without_overwriting_backup(
+    tmp_path, monkeypatch
+):
+    from datetime import datetime as RealDateTime
+
+    cases = load_ai_written_cases()
+    model = FakeProvider.model
+    model_hash = hashlib.sha256(model.encode()).hexdigest()[:12]
+    cache_dir = tmp_path / "cache"
+    cache_path = cache_dir / f"gemini-ai-written-claude-{model_hash}.json"
+    cache = EvaluationCache(cache_path, model, cases)
+    cache._save()
+    original_cache = cache_path.read_bytes()
+    fixed_timestamp = "20260102-030405"
+    existing_backup = cache_path.with_name(
+        f"{cache_path.stem}.backup-{fixed_timestamp}{cache_path.suffix}"
+    )
+    existing_backup.parent.mkdir(parents=True, exist_ok=True)
+    existing_backup.write_bytes(b"keep this backup")
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls):
+            return RealDateTime.strptime(fixed_timestamp, "%Y%m%d-%H%M%S")
+
+    class BackupCheckingProvider(FakeProvider):
+        def analyze(self, page_text):
+            backup = cache_path.with_name(
+                f"{cache_path.stem}.backup-{fixed_timestamp}-1{cache_path.suffix}"
+            )
+            assert backup.read_bytes() == original_cache
+            assert existing_backup.read_bytes() == b"keep this backup"
+            return super().analyze(page_text)
+
+    monkeypatch.setattr(ai_written_report, "datetime", FixedDateTime)
+    provider = BackupCheckingProvider()
+    _configure_ai_written_live_run(monkeypatch, tmp_path, provider)
+
+    ai_written_report.main()
+
+    assert provider.calls == len(cases)
+    assert existing_backup.read_bytes() == b"keep this backup"
+
+
+def test_ai_written_live_run_sends_only_synthetic_case_texts(tmp_path, monkeypatch):
+    cases = load_ai_written_cases()
+
+    class RecordingProvider(FakeProvider):
+        def __init__(self):
+            super().__init__()
+            self.sent_texts = []
+
+        def analyze(self, page_text):
+            self.sent_texts.append(page_text)
+            return super().analyze(page_text)
+
+    provider = RecordingProvider()
+    _configure_ai_written_live_run(monkeypatch, tmp_path, provider)
+
+    ai_written_report.main()
+
+    synthetic_texts = {case["text"] for case in cases if case["synthetic"] is True}
+    assert provider.sent_texts
+    assert set(provider.sent_texts).issubset(synthetic_texts)
+    assert len(provider.sent_texts) == len(cases)
+
+
+def test_ai_written_live_run_stops_cleanly_at_call_cap(
+    tmp_path, monkeypatch, capsys
+):
+    class CappedProvider(FakeProvider):
+        def analyze(self, page_text):
+            if self.calls == 1:
+                raise LLMCallLimitError("Synthetic per-run call cap.")
+            return super().analyze(page_text)
+
+    provider = CappedProvider()
+    _configure_ai_written_live_run(monkeypatch, tmp_path, provider)
+
+    ai_written_report.main()
+
+    output = capsys.readouterr().out
+    assert provider.calls == 1
+    assert "1 cases completed; 19 remain" in output
+    assert "per-run call cap" in output
+
+
+def test_ai_written_live_run_stops_cleanly_on_rate_limit(
+    tmp_path, monkeypatch, capsys
+):
+    class RateLimitedProvider(FakeProvider):
+        def analyze(self, page_text):
+            if self.calls == 1:
+                self.calls += 1
+                self.last_attempt_count = 1
+                raise LLMRateLimitError("Synthetic rate limit.")
+            return super().analyze(page_text)
+
+    provider = RateLimitedProvider()
+    _configure_ai_written_live_run(monkeypatch, tmp_path, provider)
+
+    ai_written_report.main()
+
+    output = capsys.readouterr().out
+    assert provider.calls == 2
+    assert "1 cases completed; 19 remain" in output
+    assert "rate limit" in output
+
+
+def test_ai_written_live_run_writes_only_its_dedicated_report(
+    tmp_path, monkeypatch
+):
+    provider = FakeProvider()
+    _configure_ai_written_live_run(monkeypatch, tmp_path, provider)
+    written_paths = []
+    original_write_text = Path.write_text
+
+    def track_write(path, *args, **kwargs):
+        written_paths.append(path.resolve())
+        assert path.name != "RESULTS.md"
+        return original_write_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", track_write)
+
+    ai_written_report.main()
+
+    assert written_paths == [(tmp_path / "RESULTS_AI_WRITTEN.md").resolve()]
+    assert (PROJECT_ROOT / "docs" / "RESULTS.md").exists()
+
+
 def test_ai_written_report_writes_only_to_its_separate_path(tmp_path, monkeypatch):
     output_path = tmp_path / "RESULTS_AI_WRITTEN.md"
     written_paths = []
@@ -143,6 +339,7 @@ def test_ai_written_report_writes_only_to_its_separate_path(tmp_path, monkeypatc
     monkeypatch.setattr(Path, "write_text", track_write)
     monkeypatch.setattr(ai_written_report, "RESULTS_AI_WRITTEN_PATH", output_path)
     monkeypatch.setattr(ai_written_report, "_commit_hash", lambda: "test123")
+    monkeypatch.setattr(sys, "argv", ["eval/run_ai_written.py"])
 
     ai_written_report.main()
 
