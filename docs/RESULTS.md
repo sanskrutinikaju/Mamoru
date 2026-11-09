@@ -83,6 +83,7 @@ Correctness here means the case label is `threat`; this is not probability calib
 
 ## Interpretation and limitations
 
+- Rules-only results for the separate 20-case AI-written Claude group are in [RESULTS_AI_WRITTEN.md](RESULTS_AI_WRITTEN.md); this group is outside the fixed held-out split.
 - The fixed held-out IDs are in `eval/data/splits.json`; the evaluator never uses them to tune rules or prompts.
 - A positive prediction means at least one finding was returned. No finding is counted as an abstention and as a negative prediction. Confusion counts and percentages use only the held-out cases.
 - The AI-written scam-style group is reported separately from the core examples. It contains synthetic examples, not copied messages or real brands.

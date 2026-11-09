@@ -17,6 +17,7 @@ This is an engineering portfolio project. It is not a finished security product.
 - The extension displays the report as plain text; findings are signals, not proof
 - Live scans explicitly state that Gemini is disabled for real page text
 - A 144-case synthetic dataset has a fixed 48-case held-out split, including a separate 24-case AI-written scam-style group
+- The separate 20-case `ai_written_claude` group was written by an AI model that had not seen the rule definitions; it is not human-written, is synthetic, and is used as a separate check, never for tuning
 - The evaluator compares rules-only, Gemini-only, and hybrid results without tuning on held-out examples
 
 **Not built yet:** agentic investigation and production packaging.

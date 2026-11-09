@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import eval.run_ai_written as ai_written_report
 import eval.run as evaluation_run
 from backend.llm.provider import (
     LLMCallLimitError,
@@ -127,6 +128,26 @@ def test_ai_written_dataset_normalizes_and_validates_every_line(tmp_path):
     path.write_text(json.dumps(source), encoding="utf-8")
     with pytest.raises(ValueError, match="Invalid AI-written case"):
         load_ai_written_cases(path)
+
+
+def test_ai_written_report_writes_only_to_its_separate_path(tmp_path, monkeypatch):
+    output_path = tmp_path / "RESULTS_AI_WRITTEN.md"
+    written_paths = []
+    original_write_text = Path.write_text
+
+    def track_write(path, *args, **kwargs):
+        written_paths.append(path.name)
+        assert path.name != "RESULTS.md"
+        return original_write_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", track_write)
+    monkeypatch.setattr(ai_written_report, "RESULTS_AI_WRITTEN_PATH", output_path)
+    monkeypatch.setattr(ai_written_report, "_commit_hash", lambda: "test123")
+
+    ai_written_report.main()
+
+    assert written_paths == ["RESULTS_AI_WRITTEN.md"]
+    assert "test123" in output_path.read_text(encoding="utf-8")
 
 
 def test_split_rejects_unknown_held_out_ids(tmp_path):
