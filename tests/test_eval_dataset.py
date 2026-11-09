@@ -15,12 +15,14 @@ from backend.llm.provider import (
 )
 from backend.rules import RuleEngine
 from eval.run import (
+    CLAUDE_CASES_PATH,
     EvaluationCache,
     EvaluationPaused,
     VariantResult,
     _category_rows,
     _format_variant_row,
     evaluate_gemini,
+    load_ai_written_cases,
     load_cases,
     load_split,
 )
@@ -97,6 +99,34 @@ def test_dataset_loader_rejects_case_not_marked_synthetic(tmp_path):
 
     with pytest.raises(ValueError, match="non-synthetic"):
         load_cases(cases_path)
+
+
+def test_ai_written_dataset_normalizes_and_validates_every_line(tmp_path):
+    cases = load_ai_written_cases()
+    assert len(cases) == 20
+    assert all(case["group"] == "ai_written_claude" for case in cases)
+    assert all(case["synthetic"] is True for case in cases)
+    assert all(case["authorship"] == "AI-written" for case in cases)
+    assert {case["label"] for case in cases} == {"threat", "benign"}
+    assert all(case["category"] != "benign" for case in cases)
+    assert {"tech_support_scam", "advance_fee_scam"}.issubset(
+        {case["category"] for case in cases}
+    )
+
+    path = tmp_path / "claude.jsonl"
+    source = json.loads(CLAUDE_CASES_PATH.read_text(encoding="utf-8").splitlines()[0])
+    path.write_text(json.dumps(source) + "\n{", encoding="utf-8")
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        load_ai_written_cases(path)
+
+    path.write_text(json.dumps(source) + "\n" + json.dumps(source), encoding="utf-8")
+    with pytest.raises(ValueError, match="Duplicate"):
+        load_ai_written_cases(path)
+
+    source["label"] = "unknown"
+    path.write_text(json.dumps(source), encoding="utf-8")
+    with pytest.raises(ValueError, match="Invalid AI-written case"):
+        load_ai_written_cases(path)
 
 
 def test_split_rejects_unknown_held_out_ids(tmp_path):

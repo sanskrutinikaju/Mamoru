@@ -39,6 +39,7 @@ from backend.schemas.analysis import LLMAnalysis  # noqa: E402
 
 DATA_DIR = Path(__file__).parent / "data"
 CASES_PATH = DATA_DIR / "cases.jsonl"
+CLAUDE_CASES_PATH = DATA_DIR / "claude_written.jsonl"
 SPLIT_PATH = DATA_DIR / "splits.json"
 CACHE_DIR = Path(__file__).parent / ".cache"
 RESULTS_PATH = PROJECT_ROOT / "docs" / "RESULTS.md"
@@ -53,12 +54,19 @@ CASE_FIELDS = {
 }
 OPTIONAL_CASE_FIELDS = {"authorship"}
 CASE_GROUPS = {"core", "handwritten_scam_style"}
+CLAUDE_CASE_GROUP = "ai_written_claude"
+CLAUDE_CASE_FIELDS = {"id", "text", "label", "category", "language", "group"}
 CASE_CATEGORIES = {
     "none",
     "credential_request",
     "urgency_pressure",
     "prompt_injection",
     "deceptive_link",
+}
+CLAUDE_CASE_CATEGORIES = CASE_CATEGORIES | {
+    "benign",
+    "tech_support_scam",
+    "advance_fee_scam",
 }
 CACHE_FORMAT_VERSION = 2
 PROVIDER_NAME = "Google Gemini Developer API"
@@ -186,6 +194,48 @@ def load_cases(path: Path = CASES_PATH) -> list[dict[str, Any]]:
         raise ValueError("The evaluation dataset contains no cases.")
     if not any(case["group"] == "handwritten_scam_style" for case in cases):
         raise ValueError("The AI-written scam-style group is missing.")
+    return cases
+
+
+def load_ai_written_cases(path: Path = CLAUDE_CASES_PATH) -> list[dict[str, Any]]:
+    """Normalize the separate AI-written set to the evaluator's case schema."""
+    cases: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            case = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"Invalid JSON in AI-written case line {line_number}.") from error
+
+        if (
+            not isinstance(case, dict)
+            or set(case) != CLAUDE_CASE_FIELDS
+            or not isinstance(case.get("id"), str)
+            or not case["id"]
+            or not isinstance(case.get("text"), str)
+            or not case["text"]
+            or case.get("label") not in ("malicious", "benign")
+            or not isinstance(case.get("category"), str)
+            or case["category"] not in CLAUDE_CASE_CATEGORIES
+            or not isinstance(case.get("language"), str)
+            or not case["language"]
+            or case.get("group") != CLAUDE_CASE_GROUP
+        ):
+            raise ValueError(f"Invalid AI-written case on line {line_number}.")
+        if case["id"] in seen_ids:
+            raise ValueError(f"Duplicate AI-written case ID on line {line_number}.")
+        seen_ids.add(case["id"])
+        case = dict(case)
+        case["label"] = "threat" if case["label"] == "malicious" else "benign"
+        case["category"] = "none" if case["category"] == "benign" else case["category"]
+        case["synthetic"] = True
+        case["authorship"] = "AI-written"
+        cases.append(case)
+
+    if not cases:
+        raise ValueError("The AI-written dataset contains no cases.")
     return cases
 
 
